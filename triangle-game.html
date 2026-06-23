@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Triangulate — Claim the Edges</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Archivo+Black&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #09090b;
+  --surface: #111113;
+  --border: #222225;
+  --muted: #3a3a40;
+  --text: #e8e8ec;
+  --sub: #7a7a88;
+  --red: #C8102E;
+  --red-dim: #8a0c20;
+  --cyan: #00d4ff;
+  --cyan-dim: #007a99;
+  --green: #00c853;
+  --amber: #ffb300;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  user-select: none;
+}
+
+#canvas-wrap {
+  position: fixed;
+  inset: 0;
+}
+
+/* ─── HUD ─── */
+#hud {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 28px;
+  z-index: 10;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(9,9,11,0.85) 0%, transparent 100%);
+}
+
+#hud-title {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 22px;
+  letter-spacing: 3px;
+  color: var(--red);
+  text-transform: uppercase;
+}
+
+#hud-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+#stage-label {
+  font-size: 11px;
+  letter-spacing: 4px;
+  color: var(--sub);
+  text-transform: uppercase;
+}
+
+#timer-display {
+  font-size: 42px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  transition: color 0.3s;
+}
+#timer-display.warn { color: var(--amber); }
+#timer-display.danger { color: var(--red); animation: pulse 0.5s infinite alternate; }
+
+@keyframes pulse {
+  from { opacity: 1; }
+  to { opacity: 0.5; }
+}
+
+#score-panel {
+  display: flex;
+  gap: 32px;
+  align-items: center;
+}
+
+.score-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.score-label {
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: var(--sub);
+  text-transform: uppercase;
+}
+
+.score-value {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+#score-user .score-value { color: var(--cyan); }
+#score-bot .score-value { color: var(--red); }
+
+.score-divider {
+  font-size: 22px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ─── Bottom bar ─── */
+#bottom-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 16px 28px;
+  z-index: 10;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(9,9,11,0.85) 0%, transparent 100%);
+}
+
+#turn-indicator {
+  font-size: 13px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 6px 16px;
+  border-radius: 3px;
+  border: 1px solid;
+  transition: all 0.3s;
+}
+#turn-indicator.player {
+  color: var(--cyan);
+  border-color: var(--cyan-dim);
+  background: rgba(0,212,255,0.07);
+}
+#turn-indicator.bot {
+  color: var(--red);
+  border-color: var(--red-dim);
+  background: rgba(200,16,46,0.07);
+}
+#turn-indicator.bonus {
+  color: var(--green);
+  border-color: #006622;
+  background: rgba(0,200,83,0.07);
+}
+
+#progress-bar-wrap {
+  width: 200px;
+  height: 4px;
+  background: var(--muted);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+#progress-bar-fill {
+  height: 100%;
+  background: var(--green);
+  border-radius: 2px;
+  transition: width 0.4s ease;
+  width: 0%;
+}
+
+#progress-label {
+  font-size: 11px;
+  color: var(--sub);
+  letter-spacing: 1px;
+}
+
+/* ─── Overlay screens ─── */
+.screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(9,9,11,0.92);
+  backdrop-filter: blur(12px);
+  gap: 20px;
+  opacity: 1;
+  transition: opacity 0.4s;
+}
+.screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.screen-title {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 52px;
+  text-transform: uppercase;
+  letter-spacing: 6px;
+  line-height: 1;
+}
+
+.screen-sub {
+  font-size: 14px;
+  color: var(--sub);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  max-width: 460px;
+  text-align: center;
+  line-height: 1.8;
+}
+
+.btn {
+  margin-top: 12px;
+  padding: 14px 40px;
+  background: var(--red);
+  color: #fff;
+  border: none;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  cursor: pointer;
+  pointer-events: all;
+  transition: background 0.2s, transform 0.1s;
+}
+.btn:hover { background: #e01232; transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--muted);
+  color: var(--sub);
+}
+.btn-outline:hover { background: var(--surface); color: var(--text); border-color: var(--sub); }
+
+/* Win screen */
+#win-screen .screen-title { color: var(--green); }
+#lose-screen .screen-title { color: var(--red); }
+
+/* Stage advance */
+#advance-screen .screen-title { color: var(--cyan); }
+
+/* Bot thinking */
+#bot-thinking {
+  position: fixed;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(200,16,46,0.12);
+  border: 1px solid var(--red-dim);
+  padding: 8px 18px;
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--red);
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+#bot-thinking.show { opacity: 1; }
+.dot-anim {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+  animation: dot-bounce 1.2s infinite;
+}
+.dot-anim:nth-child(2) { animation-delay: 0.2s; }
+.dot-anim:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dot-bounce {
+  0%,80%,100% { transform: scale(1); opacity: 0.4; }
+  40% { transform: scale(1.5); opacity: 1; }
+}
+
+/* Instructions tooltip */
+#instructions {
+  position: fixed;
+  bottom: 70px;
+  right: 28px;
+  z-index: 10;
+  pointer-events: none;
+  font-size: 11px;
+  color: var(--sub);
+  letter-spacing: 1px;
+  line-height: 1.8;
+  text-align: right;
+}
+
+/* Highlight flash */
+@keyframes edge-flash {
+  0% { emissiveIntensity: 2; }
+  100% { emissiveIntensity: 0.5; }
+}
+
+/* Triangle capture flash */
+#triangle-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0;
+}
+#triangle-flash.user { background: radial-gradient(circle at center, rgba(0,212,255,0.08) 0%, transparent 70%); }
+#triangle-flash.bot { background: radial-gradient(circle at center, rgba(200,16,46,0.08) 0%, transparent 70%); }
+#triangle-flash.show { animation: flash-in 0.6s forwards; }
+@keyframes flash-in {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+</style>
+</head>
+<body>
+
+<div id="canvas-wrap"></div>
+
+<!-- Flash overlay -->
+<div id="triangle-flash"></div>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="hud-title">Triangulate</div>
+  <div id="hud-center">
+    <div id="stage-label">Stage 1</div>
+    <div id="timer-display">60</div>
+  </div>
+  <div id="score-panel">
+    <div class="score-block" id="score-user">
+      <div class="score-label">You</div>
+      <div class="score-value" id="user-score">0</div>
+    </div>
+    <div class="score-divider">:</div>
+    <div class="score-block" id="score-bot">
+      <div class="score-label">Bot</div>
+      <div class="score-value" id="bot-score">0</div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom bar -->
+<div id="bottom-bar">
+  <div id="turn-indicator" class="player">Your Turn</div>
+  <div id="progress-bar-wrap"><div id="progress-bar-fill"></div></div>
+  <div id="progress-label">0%</div>
+</div>
+
+<!-- Bot thinking -->
+<div id="bot-thinking">
+  <div class="dot-anim"></div>
+  <div class="dot-anim"></div>
+  <div class="dot-anim"></div>
+  Bot thinking…
+</div>
+
+<!-- Instructions -->
+<div id="instructions">
+  Click any edge to claim it<br>
+  Complete a triangle = +1 point + bonus turn<br>
+  Fill 60% to advance · Bot scores same<br>
+  More triangles when time ends = win
+</div>
+
+<!-- Screens -->
+<div id="start-screen" class="screen">
+  <div class="screen-title" style="color:var(--red)">Triangulate</div>
+  <div class="screen-sub">Claim edges. Complete triangles. Beat the bot.<br>Fill 60% of available triangles to advance through 4 stages.</div>
+  <button class="btn" onclick="startGame()">Start Game</button>
+</div>
+
+<div id="advance-screen" class="screen hidden">
+  <div class="screen-title">Stage Clear!</div>
+  <div class="screen-sub" id="advance-sub"></div>
+  <button class="btn" onclick="nextStage()">Next Stage</button>
+</div>
+
+<div id="win-screen" class="screen hidden">
+  <div class="screen-title">You Win!</div>
+  <div class="screen-sub">Outstanding. The bot had no answer.</div>
+  <button class="btn" onclick="restartGame()">Play Again</button>
+</div>
+
+<div id="lose-screen" class="screen hidden">
+  <div class="screen-title">Bot Wins</div>
+  <div class="screen-sub" id="lose-sub"></div>
+  <button class="btn" onclick="restartGame()">Try Again</button>
+</div>
+
+<div id="timeout-screen" class="screen hidden">
+  <div class="screen-title" style="color:var(--amber)">Time's Up!</div>
+  <div class="screen-sub" id="timeout-sub"></div>
+  <button class="btn" onclick="restartGame()">Try Again</button>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.163.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.163.0/examples/jsm/"
+  }
+}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ═══════════════════════════════════════════════════════
+// CONSTANTS & STAGE CONFIG
+// ═══════════════════════════════════════════════════════
+
+const STAGES = [
+  { triangles: 2,  time: 60, threshold: 0.60, n: 2, label: 'Stage 1 — Warm Up'    },
+  { triangles: 6,  time: 70, threshold: 0.60, n: 3, label: 'Stage 2 — Getting Busy' },
+  { triangles: 12, time: 80, threshold: 0.60, n: 4, label: 'Stage 3 — Serious'      },
+  { triangles: 20, time: 90, threshold: 0.60, n: 5, label: 'Stage 4 — Master'       },
+];
+
+const COL = {
+  BG:         0x09090b,
+  LINE_FREE:  0x3a3a44,
+  LINE_HOVER: 0x6a6a7a,
+  USER:       0x00d4ff,
+  BOT:        0xC8102E,
+  TRI_USER:   0x00d4ff,
+  TRI_BOT:    0xC8102E,
+  FLOOR:      0x151518,
+  GRID:       0x1e1e24,
+};
+
+const EDGE_PICK_SIZE = 0.18;  // thicker = easier to click
+
+// ═══════════════════════════════════════════════════════
+// GAME STATE
+// ═══════════════════════════════════════════════════════
+
+let state = {
+  stage: 0,
+  userScore: 0,
+  botScore: 0,
+  turn: 'user',       // 'user' | 'bot'
+  isGameOver: false,
+  timer: 60,
+  timerInterval: null,
+  bonusTurn: false,
+  edges: [],          // { id, from, to, owner: null|'user'|'bot' }
+  triangles: [],      // { id, edges: [eid,eid,eid], owner: null|'user'|'bot' }
+  triangleMeshes: [],  // { mesh, triId }
+  hoveredEdge: null,
+};
+
+// ═══════════════════════════════════════════════════════
+// THREE.JS SETUP
+// ═══════════════════════════════════════════════════════
+
+const wrap = document.getElementById('canvas-wrap');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(COL.BG);
+wrap.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(COL.BG, 0.038);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 8, 14);
+camera.lookAt(0, 0, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.enablePan = false;
+controls.minDistance = 2;
+controls.maxDistance = 60;
+controls.minPolarAngle = 0.2;
+controls.maxPolarAngle = Math.PI / 2.2;
+
+// Lighting
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+dir.position.set(5, 10, 5);
+scene.add(dir);
+
+// Floor grid
+const grid = new THREE.GridHelper(30, 30, COL.GRID, COL.GRID);
+grid.position.y = -0.05;
+grid.material.opacity = 0.5;
+grid.material.transparent = true;
+scene.add(grid);
+
+// Groups
+const latticeGroup = new THREE.Group();
+scene.add(latticeGroup);
+
+// ─── Edge picking plane (invisible, covers whole scene for raycasting) ───
+const pickPlane = new THREE.Mesh(
+  new THREE.PlaneGeometry(200, 200),
+  new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide })
+);
+pickPlane.rotation.x = -Math.PI / 2;
+pickPlane.position.y = 0.01;
+scene.add(pickPlane);
+
+// Edge line segments (fat lines via tube)
+const edgeLineGroup = new THREE.Group();
+scene.add(edgeLineGroup);
+
+// Triangle fill meshes
+const triFillGroup = new THREE.Group();
+scene.add(triFillGroup);
+
+// Edge group (LineSegments for fat rendering)
+let edgeLineSegments = null;
+
+// ═══════════════════════════════════════════════════════
+// LATTICE GEOMETRY
+// ═══════════════════════════════════════════════════════
+
+/*
+  Triangular lattice with n small triangles per side.
+  
+  Layout (n=3):
+    Row 0: n+1=4 vertices at y=0
+    Row 1: n=3 vertices at y=-√3/2
+    Row 2: n+1=4 vertices at y=-√3
+    Row 3: n=3 vertices at y=-3√3/2
+    ...
+  
+  Edges:
+    Horizontal: each row connects adjacent vertices
+    Vertical-slanted: each pair of adjacent rows forms n "V" shapes
+  
+  Triangles: n² total (Type-A downward + Type-B upward, n of each per n×n grid)
+    Type-A (downward): base on even row, apex on odd row below
+    Type-B (upward):   apex on even row, base on odd row below
+*/
+
+function buildLattice(n) {
+  const SQRT3 = Math.sqrt(3);
+  const verts = [];   // [x, y, z]
+  const edges = [];   // { id, vi, vj, from, to }
+  const triangles = []; // { id, vi, vj, vk }
+  const edgeMap = new Map(); // "min-max" → edgeId
+  let eid = 0, tid = 0;
+
+  const ek = (a, b) => `${Math.min(a, b)}-${Math.max(a, b)}`;
+  const addEdge = (vi, vj) => {
+    const key = ek(vi, vj);
+    if (edgeMap.has(key)) return edgeMap.get(key);
+    edgeMap.set(key, eid);
+    edges.push({ id: eid++, vi, vj });
+    return eid - 1;
+  };
+
+  // --- Vertices ---
+  for (let r = 0; r <= n; r++) {
+    const y = -r * SQRT3 / 2;
+    const count = r % 2 === 0 ? n + 1 : n;
+    const xStart = -(n / 2) + (r % 2 === 0 ? 0 : 0.5);
+    for (let i = 0; i < count; i++) {
+      verts.push([xStart + i, y, 0]);
+    }
+  }
+
+  // Row ranges
+  const rowRanges = [];
+  let cum = 0;
+  for (let r = 0; r <= n; r++) {
+    const cnt = r % 2 === 0 ? n + 1 : n;
+    rowRanges.push([cum, cum + cnt]);
+    cum += cnt;
+  }
+
+  // --- Horizontal edges ---
+  for (let r = 0; r <= n; r++) {
+    const [a0, a1] = rowRanges[r];
+    for (let i = a0; i < a1 - 1; i++) {
+      addEdge(i, i + 1);
+    }
+  }
+
+  // --- Slanted edges (connect adjacent rows) ---
+  for (let r = 0; r < n; r++) {
+    const [a0, a1] = rowRanges[r];
+    const [b0, b1] = rowRanges[r + 1];
+    const cntR = a1 - a0; // vertices in row r
+    const cntNR = b1 - b0; // vertices in row r+1
+
+    // For each pair of adjacent rows, the difference is at most 1.
+    // Pattern: r even → row r has 1 MORE vertex than row r+1
+    //          r odd  → row r has 1 FEWER vertex than row r+1
+
+    if (r % 2 === 0) {
+      // Row r (even) has n+1 verts; row r+1 (odd) has n verts
+      // Vertex i in row r connects down-left to row r+1[i-1] (if valid) and down-right to row r+1[i] (if valid)
+      for (let i = 0; i < cntR; i++) {
+        if (i > 0)     addEdge(a0 + i,     b0 + (i - 1)); // down-left
+        if (i < cntNR) addEdge(a0 + i,     b0 + i);       // down-right
+      }
+    } else {
+      // Row r (odd) has n verts; row r+1 (even) has n+1 verts
+      // Vertex j in row r connects up-right to row r+1[j] (always) and up-left to row r+1[j+1] (always)
+      for (let j = 0; j < cntR; j++) {
+        addEdge(a0 + j, b0 + j);     // up-right
+        addEdge(a0 + j, b0 + j + 1); // up-left
+      }
+    }
+  }
+
+  // --- Triangles (n²) ---
+  // Type-A (downward-pointing): even row, apex on odd row below
+  for (let r = 0; r < n; r += 2) {
+    const [a0] = rowRanges[r];
+    const [b0] = rowRanges[r + 1];
+    for (let i = 0; i < n; i++) {
+      const vi = a0 + i;
+      const vj = b0 + i;
+      const vk = b0 + i + 1;
+      triangles.push({ id: tid++, vi, vj, vk });
+    }
+  }
+
+  // Type-B (upward-pointing): odd row, base on even row below
+  for (let r = 1; r < n; r += 2) {
+    const [a0] = rowRanges[r];
+    const [b0] = rowRanges[r + 1];
+    for (let i = 0; i < n; i++) {
+      const vi = a0 + i;
+      const vj = a0 + i + 1;
+      const vk = b0 + i + 1;
+      triangles.push({ id: tid++, vi, vj, vk });
+    }
+  }
+
+  // Attach edge data to returned objects
+  for (const e of edges) {
+    e.from = verts[e.vi];
+    e.to = verts[e.vj];
+  }
+
+  return { verts, edges, triangles, edgeMap };
+}
+
+// ═══════════════════════════════════════════════════════
+// EDGE MESHES (fat LineSegments)
+// ═══════════════════════════════════════════════════════
+
+// We create a single LineSegments object with all edges.
+// Positions are updated when ownership changes (color changes).
+
+let edgePositions = null;
+let edgeColors = null;
+let edgeLineSegmentsMesh = null;
+const edgeMeshes = []; // { edgeId, baseColor uniform index }
+
+function createEdgeMeshes(edges) {
+  // Clear
+  while (edgeLineGroup.children.length) edgeLineGroup.remove(edgeLineGroup.children[0]);
+  edgeMeshes.length = 0;
+
+  if (edgeLineSegmentsMesh) {
+    edgeLineSegmentsMesh.geometry.dispose();
+    edgeLineSegmentsMesh.material.dispose();
+  }
+
+  const count = edges.length;
+  // Each edge = 2 vertices
+  const positions = new Float32Array(count * 2 * 3);
+  const colors = new Float32Array(count * 2 * 3);
+
+  for (const e of edges) {
+    positions[e.id * 6 + 0] = e.from[0];
+    positions[e.id * 6 + 1] = e.from[1];
+    positions[e.id * 6 + 2] = e.from[2];
+    positions[e.id * 6 + 3] = e.to[0];
+    positions[e.id * 6 + 4] = e.to[1];
+    positions[e.id * 6 + 5] = e.to[2];
+
+    // Default: muted grey
+    const [r, g, b] = hexToRGB(COL.LINE_FREE);
+    colors[e.id * 6 + 0] = r; colors[e.id * 6 + 1] = g; colors[e.id * 6 + 2] = b;
+    colors[e.id * 6 + 3] = r; colors[e.id * 6 + 4] = g; colors[e.id * 6 + 5] = b;
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  const mat = new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 2, transparent: true, opacity: 0.95 });
+
+  edgeLineSegmentsMesh = new THREE.LineSegments(geo, mat);
+  edgeLineSegmentsMesh.renderOrder = 1;
+  edgeLineGroup.add(edgeLineSegmentsMesh);
+
+  // Invisible wider picking meshes (tubes) for each edge
+  for (const e of edges) {
+    const midX = (e.from[0] + e.to[0]) / 2;
+    const midY = (e.from[1] + e.to[1]) / 2;
+    const dx = e.to[0] - e.from[0];
+    const dy = e.to[1] - e.from[1];
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const angle = Math.atan2(dy, dx);
+
+    const geo = new THREE.CylinderGeometry(EDGE_PICK_SIZE, EDGE_PICK_SIZE, len, 8);
+    geo.rotateZ(-angle);
+    geo.translate(midX, midY, 0);
+
+    const mat = new THREE.MeshBasicMaterial({ visible: false });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.userData = { type: 'edge', edgeId: e.id };
+    mesh.renderOrder = 0;
+    scene.add(mesh);
+    edgeMeshes.push(mesh);
+  }
+}
+
+function updateEdgeColor(edgeId, owner) {
+  if (!edgeLineSegmentsMesh) return;
+  const geo = edgeLineSegmentsMesh.geometry;
+  const colors = geo.attributes.color.array;
+  const e = state.edges[edgeId];
+  const [r, g, b] = owner === 'user' ? hexToRGB(COL.USER)
+                : owner === 'bot'  ? hexToRGB(COL.BOT)
+                :                     hexToRGB(COL.LINE_FREE);
+  colors[edgeId * 6 + 0] = r; colors[edgeId * 6 + 1] = g; colors[edgeId * 6 + 2] = b;
+  colors[edgeId * 6 + 3] = r; colors[edgeId * 6 + 4] = g; colors[edgeId * 6 + 5] = b;
+  geo.attributes.color.needsUpdate = true;
+}
+
+function setEdgeHover(edgeId, on) {
+  if (!edgeLineSegmentsMesh || !state.edges[edgeId]) return;
+  if (state.edges[edgeId].owner !== null) return; // already claimed
+  const geo = edgeLineSegmentsMesh.geometry;
+  const colors = geo.attributes.color.array;
+  const [r, g, b] = on ? hexToRGB(COL.LINE_HOVER) : hexToRGB(COL.LINE_FREE);
+  colors[edgeId * 6 + 0] = r; colors[edgeId * 6 + 1] = g; colors[edgeId * 6 + 2] = b;
+  colors[edgeId * 6 + 3] = r; colors[edgeId * 6 + 4] = g; colors[edgeId * 6 + 5] = b;
+  geo.attributes.color.needsUpdate = true;
+}
+
+// ═══════════════════════════════════════════════════════
+// TRIANGLE FILL MESHES
+// ═══════════════════════════════════════════════════════
+
+function createTriangleMeshes(triangles, verts) {
+  // Clear
+  while (triFillGroup.children.length) {
+    const c = triFillGroup.children[0];
+    c.geometry.dispose(); c.material.dispose();
+    triFillGroup.remove(c);
+  }
+  state.triangleMeshes.length = 0;
+
+  for (const t of triangles) {
+    const va = verts[t.vi], vb = verts[t.vj], vk = verts[t.vk];
+
+    // Center
+    const cx = (va[0] + vb[0] + vk[0]) / 3;
+    const cy = (va[1] + vb[1] + vk[1]) / 3;
+
+    // Create shape
+    const shape = new THREE.Shape();
+    shape.moveTo(va[0] - cx, va[1] - cy);
+    shape.lineTo(vb[0] - cx, vb[1] - cy);
+    shape.lineTo(vk[0] - cx, vk[1] - cy);
+    shape.closePath();
+
+    const geo = new THREE.ShapeGeometry(shape);
+    geo.translate(cx, cy, -0.01);
+
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.renderOrder = 0;
+    triFillGroup.add(mesh);
+    state.triangleMeshes.push({ mesh, triId: t.id, owner: null });
+  }
+}
+
+function updateTriangleFill(triId, owner) {
+  const entry = state.triangleMeshes.find(t => t.triId === triId);
+  if (!entry) return;
+  const { mesh } = entry;
+  const isUser = owner === 'user';
+  mesh.material.color.set(isUser ? COL.TRI_USER : COL.TRI_BOT);
+  mesh.material.opacity = isUser ? 0.40 : 0.40;
+  entry.owner = owner;
+}
+
+// ═══════════════════════════════════════════════════════
+// HELPER
+// ═══════════════════════════════════════════════════════
+
+function hexToRGB(hex) {
+  return [(hex >> 16 & 255) / 255, (hex >> 8 & 255) / 255, (hex & 255) / 255];
+}
+
+// ═══════════════════════════════════════════════════════
+// LATTICE BUILD
+// ═══════════════════════════════════════════════════════
+
+function buildLatticeForStage(n) {
+  // Clear scene lattice
+  while (latticeGroup.children.length) latticeGroup.remove(latticeGroup.children[0]);
+
+  const { verts, edges, triangles, edgeMap } = buildLattice(n);
+
+  // Add vertex dots
+  for (const v of verts) {
+    const geo = new THREE.CircleGeometry(0.07, 12);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x4a4a56, transparent: true, opacity: 0.8 });
+    const dot = new THREE.Mesh(geo, mat);
+    dot.position.set(v[0], v[1], 0.02);
+    latticeGroup.add(dot);
+  }
+
+  // Build edge lookup by vertex pair
+  state.edgeByVerts = new Map();
+  for (const e of edges) {
+    state.edgeByVerts.set(`${e.vi}-${e.vj}`, e.id);
+    state.edgeByVerts.set(`${e.vj}-${e.vi}`, e.id);
+  }
+
+  state.verts = verts;
+  state.edges = edges;
+  state.triangles = triangles;
+  state.edgeMap = edgeMap;
+
+  createEdgeMeshes(edges);
+  createTriangleMeshes(triangles, verts);
+
+  return { verts, edges, triangles };
+}
+
+// ═══════════════════════════════════════════════════════
+// GAME LOGIC
+// ═══════════════════════════════════════════════════════
+
+function getAdjacentTrianglesContainingEdge(edgeId) {
+  return getTrianglesForEdge(edgeId);
+}
+
+function getTrianglesForEdge(edgeId) {
+  const e = state.edges[edgeId];
+  const results = [];
+  for (const t of state.triangles) {
+    const vs = [t.vi, t.vj, t.vk];
+    const hasVi = vs.includes(e.vi);
+    const hasVj = vs.includes(e.vj);
+    if (hasVi && hasVj) results.push(t.id);
+  }
+  return results;
+}
+
+function isTriangleComplete(triId) {
+  const t = state.triangles[triId];
+  if (!t) return false;
+  const vs = [t.vi, t.vj, t.vk];
+
+  function edgeFor(verts) {
+    const key = `${Math.min(...verts)}-${Math.max(...verts)}`;
+    return state.edgeByVerts.get(key);
+  }
+
+  const e1 = edgeFor([vs[0], vs[1]]);
+  const e2 = edgeFor([vs[1], vs[2]]);
+  const e3 = edgeFor([vs[0], vs[2]]);
+
+  if (e1 === undefined || e2 === undefined || e3 === undefined) return false;
+  return state.edges[e1].owner !== null &&
+         state.edges[e2].owner !== null &&
+         state.edges[e3].owner !== null;
+}
+
+function getTriangleOwner(triId) {
+  const t = state.triangles[triId];
+  if (!t) return null;
+  const vs = [t.vi, t.vj, t.vk];
+
+  function edgeFor(verts) {
+    const key = `${Math.min(...verts)}-${Math.max(...verts)}`;
+    return state.edgeByVerts.get(key);
+  }
+
+  const e1 = edgeFor([vs[0], vs[1]]);
+  const e2 = edgeFor([vs[1], vs[2]]);
+  const e3 = edgeFor([vs[0], vs[2]]);
+
+  if (e1 === undefined || e2 === undefined || e3 === undefined) return null;
+  const o1 = state.edges[e1].owner;
+  const o2 = state.edges[e2].owner;
+  const o3 = state.edges[e3].owner;
+  if (o1 === null || o2 === null || o3 === null) return null;
+  if (o1 === o2 && o2 === o3) return o1;
+  return null; // mixed ownership
+}
+
+function checkNewTriangles(owner) {
+  const completed = [];
+  for (const t of state.triangles) {
+    if (t._owner !== undefined && t._owner === owner) continue; // already counted
+    if (t._owner === null && getTriangleOwner(t.id) === owner) {
+      t._owner = owner;
+      completed.push(t.id);
+    }
+  }
+  return completed;
+}
+
+function claimEdge(edgeId, owner) {
+  if (state.edges[edgeId].owner !== null) return [];
+  state.edges[edgeId].owner = owner;
+  updateEdgeColor(edgeId, owner);
+
+  const newTris = checkNewTriangles(owner);
+  for (const tid of newTris) {
+    updateTriangleFill(tid, owner);
+    triggerFlash(owner);
+  }
+  return newTris;
+}
+
+function getAvailableEdges() {
+  return state.edges.filter(e => e.owner === null);
+}
+
+function countCompletedTriangles(owner) {
+  return state.triangles.filter(t => getTriangleOwner(t.id) === owner).length;
+}
+
+function getTotalAvailable() {
+  return state.triangles.length;
+}
+
+function getProgressPct(owner) {
+  const total = getTotalAvailable();
+  if (total === 0) return 0;
+  return countCompletedTriangles(owner) / total;
+}
+
+// ═══════════════════════════════════════════════════════
+// UI UPDATES
+// ═══════════════════════════════════════════════════════
+
+function updateScoreDisplay() {
+  document.getElementById('user-score').textContent = state.userScore;
+  document.getElementById('bot-score').textContent = state.botScore;
+
+  const total = getTotalAvailable();
+  const userPct = total > 0 ? Math.round((countCompletedTriangles('user') / total) * 100) : 0;
+  document.getElementById('progress-bar-fill').style.width = userPct + '%';
+  document.getElementById('progress-label').textContent = userPct + '%';
+}
+
+function updateTurnIndicator(msg, cls) {
+  const el = document.getElementById('turn-indicator');
+  el.textContent = msg;
+  el.className = cls;
+}
+
+function triggerFlash(owner) {
+  const fl = document.getElementById('triangle-flash');
+  fl.className = owner === 'user' ? 'user show' : 'bot show';
+  setTimeout(() => { fl.className = ''; }, 600);
+}
+
+// ═══════════════════════════════════════════════════════
+// TIMER
+// ═══════════════════════════════════════════════════════
+
+function startTimer() {
+  clearInterval(state.timerInterval);
+  const cfg = STAGES[state.stage];
+  state.timer = cfg.time;
+  updateTimerDisplay();
+
+  state.timerInterval = setInterval(() => {
+    state.timer--;
+    updateTimerDisplay();
+    if (state.timer <= 0) {
+      clearInterval(state.timerInterval);
+      onTimeUp();
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  const el = document.getElementById('timer-display');
+  el.textContent = state.timer;
+  el.className = state.timer <= 10 ? 'danger' : state.timer <= 20 ? 'warn' : '';
+}
+
+function stopTimer() {
+  clearInterval(state.timerInterval);
+}
+
+// ═══════════════════════════════════════════════════════
+// TURN LOGIC
+// ═══════════════════════════════════════════════════════
+
+function endUserTurn(newTris) {
+  if (state.isGameOver) return;
+
+  if (newTris.length > 0) {
+    // Bonus turn
+    state.bonusTurn = true;
+    state.userScore += newTris.length;
+    updateScoreDisplay();
+    updateTurnIndicator(`+${newTris.length} Bonus!`, 'bonus');
+  } else {
+    // Switch to bot
+    state.bonusTurn = false;
+    state.turn = 'bot';
+    updateTurnIndicator("Bot's Turn", 'bot');
+    setTimeout(botTurn, 900 + Math.random() * 600);
+  }
+}
+
+function endBotTurn(newTris) {
+  if (state.isGameOver) return;
+
+  if (newTris.length > 0) {
+    state.botScore += newTris.length;
+    updateScoreDisplay();
+    updateTurnIndicator(`Bot +${newTris.length}`, 'bot');
+    if (!state.isGameOver) {
+      setTimeout(botTurn, 700 + Math.random() * 500);
+    }
+  } else {
+    state.turn = 'user';
+    updateTurnIndicator('Your Turn', 'player');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// BOT AI
+// ═══════════════════════════════════════════════════════
+
+function botTurn() {
+  if (state.isGameOver || state.turn !== 'bot') return;
+
+  document.getElementById('bot-thinking').classList.add('show');
+
+  const delay = 600 + Math.random() * 800;
+  setTimeout(() => {
+    document.getElementById('bot-thinking').classList.remove('show');
+    if (state.isGameOver) return;
+
+    const edgeId = chooseBotEdge();
+    if (edgeId === null) {
+      // No edges left... shouldn't happen
+      state.turn = 'user';
+      updateTurnIndicator('Your Turn', 'player');
+      return;
+    }
+
+    const newTris = claimEdge(edgeId, 'bot');
+    endBotTurn(newTris);
+  }, delay);
+}
+
+function chooseBotEdge() {
+  const available = getAvailableEdges();
+  if (available.length === 0) return null;
+
+  // Greedy: try to complete a triangle
+  for (const e of available) {
+    const tris = getTrianglesForEdge(e.id);
+    for (const tid of tris) {
+      if (isTriangleComplete(tid)) continue;
+      const t = state.triangles[tid];
+      const vs = [t.vi, t.vj, t.vk];
+      function edgeFor(a, b) {
+        const key = `${Math.min(a, b)}-${Math.max(a, b)}`;
+        return state.edgeByVerts.get(key);
+      }
+      const e1 = edgeFor(vs[0], vs[1]);
+      const e2 = edgeFor(vs[1], vs[2]);
+      const e3 = edgeFor(vs[0], vs[2]);
+      if (e1 === undefined || e2 === undefined || e3 === undefined) continue;
+      const owners = [state.edges[e1]?.owner, state.edges[e2]?.owner, state.edges[e3]?.owner];
+      const ownedByBot = owners.filter(o => o === 'bot').length;
+      const unclaimed = owners.filter(o => o === null).length;
+      if (ownedByBot === 2 && unclaimed === 1) return e.id; // Bot can complete
+    }
+  }
+
+  // Block: if user has 2 edges of a triangle, take the third
+  for (const e of available) {
+    const tris = getTrianglesForEdge(e.id);
+    for (const tid of tris) {
+      const t = state.triangles[tid];
+      const vs = [t.vi, t.vj, t.vk];
+      function edgeFor(a, b) {
+        const key = `${Math.min(a, b)}-${Math.max(a, b)}`;
+        return state.edgeByVerts.get(key);
+      }
+      const e1 = edgeFor(vs[0], vs[1]);
+      const e2 = edgeFor(vs[1], vs[2]);
+      const e3 = edgeFor(vs[0], vs[2]);
+      if (e1 === undefined || e2 === undefined || e3 === undefined) continue;
+      const owners = [state.edges[e1]?.owner, state.edges[e2]?.owner, state.edges[e3]?.owner];
+      const ownedByUser = owners.filter(o => o === 'user').length;
+      const unclaimed = owners.filter(o => o === null).length;
+      if (ownedByUser === 2 && unclaimed === 1) return e.id; // Block user
+    }
+  }
+
+  // Stage 1-2: random
+  if (state.stage < 2) {
+    return available[Math.floor(Math.random() * available.length)].id;
+  }
+
+  // Stage 3-4: prefer edges that are part of multiple triangles
+  let bestEdge = available[0];
+  let bestScore = 0;
+  for (const e of available) {
+    const tris = getTrianglesForEdge(e.id);
+    let score = tris.length;
+    // Slight preference for edges with 2 bot-owned neighbors
+    for (const tid of tris) {
+      const t = state.triangles[tid];
+      const vs = [t.vi, t.vj, t.vk];
+      function edgeFor(a, b) {
+        const key = `${Math.min(a, b)}-${Math.max(a, b)}`;
+        return state.edgeByVerts.get(key);
+      }
+      const e1 = edgeFor(vs[0], vs[1]);
+      const e2 = edgeFor(vs[1], vs[2]);
+      const e3 = edgeFor(vs[0], vs[2]);
+      if (e1 === undefined || e2 === undefined || e3 === undefined) continue;
+      const owners = [state.edges[e1]?.owner, state.edges[e2]?.owner, state.edges[e3]?.owner];
+      const botOwned = owners.filter(o => o === 'bot').length;
+      if (botOwned === 1) score += 0.5;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestEdge = e;
+    }
+  }
+  return bestEdge.id;
+}
+
+// ═══════════════════════════════════════════════════════
+// GAME FLOW
+// ═══════════════════════════════════════════════════════
+
+function onTimeUp() {
+  stopTimer();
+  state.isGameOver = true;
+  const userTri = countCompletedTriangles('user');
+  const botTri = countCompletedTriangles('bot');
+
+  if (userTri > botTri) {
+    showScreen('win-screen');
+  } else if (botTri > userTri) {
+    document.getElementById('timeout-sub').textContent =
+      `You: ${userTri} · Bot: ${botTri} triangles — time expired`;
+    showScreen('timeout-screen');
+  } else {
+    document.getElementById('timeout-sub').textContent =
+      `Tie at ${userTri} each — time expired`;
+    showScreen('timeout-screen');
+  }
+}
+
+function checkStageAdvance() {
+  const cfg = STAGES[state.stage];
+  const total = getTotalAvailable();
+  const userTri = countCompletedTriangles('user');
+  const botTri = countCompletedTriangles('bot');
+
+  if (userTri >= total * cfg.threshold) {
+    stopTimer();
+    state.isGameOver = true;
+    if (state.stage < STAGES.length - 1) {
+      document.getElementById('advance-sub').textContent =
+        `${userTri}/${total} triangles (${Math.round(userTri/total*100)}%) — Stage ${state.stage + 2} awaits`;
+      showScreen('advance-screen');
+    } else {
+      document.getElementById('advance-sub').textContent =
+        'All 4 stages cleared. You are the Triangle Master.';
+      showScreen('win-screen');
+    }
+    return true;
+  }
+  return false;
+}
+
+function showScreen(id) {
+  ['start-screen', 'advance-screen', 'win-screen', 'lose-screen', 'timeout-screen'].forEach(s => {
+    document.getElementById(s).classList.add('hidden');
+  });
+  document.getElementById(id).classList.remove('hidden');
+}
+
+function hideAllScreens() {
+  ['start-screen', 'advance-screen', 'win-screen', 'lose-screen', 'timeout-screen'].forEach(s => {
+    document.getElementById(s).classList.add('hidden');
+  });
+}
+
+function startGame() {
+  state.stage = 0;
+  state.userScore = 0;
+  state.botScore = 0;
+  initStage();
+  hideAllScreens();
+}
+
+function nextStage() {
+  state.stage++;
+  state.userScore = 0;
+  state.botScore = 0;
+  initStage();
+  hideAllScreens();
+}
+
+function restartGame() {
+  state.stage = 0;
+  state.userScore = 0;
+  state.botScore = 0;
+  initStage();
+  hideAllScreens();
+}
+
+function initStage() {
+  stopTimer();
+  state.isGameOver = false;
+  state.turn = 'user';
+  state.bonusTurn = false;
+
+  // Reset triangle ownership flags
+  for (const t of state.triangles) { t._owner = null; }
+
+  const cfg = STAGES[state.stage];
+
+  // Rebuild lattice for this stage
+  buildLatticeForStage(cfg.n);
+
+  // Reset edge ownership
+  for (const e of state.edges) { e.owner = null; }
+
+  // Reset triangle fills
+  for (const entry of state.triangleMeshes) {
+    entry.mesh.material.opacity = 0;
+    entry.owner = null;
+  }
+  for (const t of state.triangles) { t._owner = null; }
+
+  // Update UI
+  document.getElementById('stage-label').textContent = cfg.label;
+  state.userScore = 0;
+  state.botScore = 0;
+  updateScoreDisplay();
+  updateTurnIndicator('Your Turn', 'player');
+
+  hideAllScreens();
+  startTimer();
+}
+
+// ═══════════════════════════════════════════════════════
+// INPUT — RAYCASTING
+// ═══════════════════════════════════════════════════════
+
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+renderer.domElement.addEventListener('mousemove', e => {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+
+  const hits = raycaster.intersectObjects(edgeMeshes);
+  const newHover = hits.length > 0 ? hits[0].object.userData.edgeId : null;
+
+  if (newHover !== state.hoveredEdge) {
+    if (state.hoveredEdge !== null) setEdgeHover(state.hoveredEdge, false);
+    state.hoveredEdge = newHover;
+    if (newHover !== null) setEdgeHover(newHover, true);
+  }
+});
+
+renderer.domElement.addEventListener('click', e => {
+  if (state.isGameOver) return;
+  if (state.turn !== 'user') return;
+
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+
+  const hits = raycaster.intersectObjects(edgeMeshes);
+  if (hits.length === 0) return;
+
+  const edgeId = hits[0].object.userData.edgeId;
+  if (state.edges[edgeId].owner !== null) return; // Already claimed
+
+  const newTris = claimEdge(edgeId, 'user');
+  endUserTurn(newTris);
+  updateScoreDisplay();
+  checkStageAdvance();
+});
+
+// Touch support
+renderer.domElement.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const touch = e.touches[0];
+  mouse.x = (touch.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(touch.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(edgeMeshes);
+  if (hits.length === 0) return;
+  const edgeId = hits[0].object.userData.edgeId;
+  if (state.isGameOver || state.turn !== 'user') return;
+  if (state.edges[edgeId].owner !== null) return;
+  const newTris = claimEdge(edgeId, 'user');
+  endUserTurn(newTris);
+  updateScoreDisplay();
+  checkStageAdvance();
+}, { passive: false });
+
+// ═══════════════════════════════════════════════════════
+// RESIZE
+// ═══════════════════════════════════════════════════════
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ═══════════════════════════════════════════════════════
+// ANIMATE LOOP
+// ═══════════════════════════════════════════════════════
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+// ═══════════════════════════════════════════════════════
+// BOOT — build stage 1, show start screen
+// ═══════════════════════════════════════════════════════
+
+buildLatticeForStage(STAGES[0].n);
+showScreen('start-screen');
+
+// Expose to window for button onclick
+window.startGame = startGame;
+window.nextStage = nextStage;
+window.restartGame = restartGame;
+</script>
+</body>
+</html>
