@@ -709,21 +709,22 @@ function createEdgeMeshes(edges) {
   edgeLineSegmentsMesh.renderOrder = 1;
   edgeLineGroup.add(edgeLineSegmentsMesh);
 
-  // Invisible wider picking meshes (tubes) for each edge
+  // Invisible picking meshes — single large sphere at midpoint covers all clicks on the edge
   for (const e of edges) {
-    const midX = (e.from[0] + e.to[0]) / 2;
-    const midY = (e.from[1] + e.to[1]) / 2;
-    const dx = e.to[0] - e.from[0];
-    const dy = e.to[1] - e.from[1];
+    const from = e.from;
+    const to = e.to;
+    const mx = (from[0] + to[0]) / 2;
+    const my = (from[1] + to[1]) / 2;
+    const dx = to[0] - from[0];
+    const dy = to[1] - from[1];
     const len = Math.sqrt(dx * dx + dy * dy);
-    const angle = Math.atan2(dy, dx);
+    // Radius = half edge length → sphere fully covers edge from any approach angle
+    const radius = len / 2 + EDGE_PICK_SIZE * 0.8;
 
-    const geo = new THREE.CylinderGeometry(EDGE_PICK_SIZE, EDGE_PICK_SIZE, len, 8);
-    geo.rotateZ(-angle);
-    geo.translate(midX, midY, 0);
-
+    const geo = new THREE.SphereGeometry(radius, 8, 6);
     const mat = new THREE.MeshBasicMaterial({ visible: false });
     const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(mx, my, 0);
     mesh.userData = { type: 'edge', edgeId: e.id };
     mesh.renderOrder = 0;
     scene.add(mesh);
@@ -1313,12 +1314,16 @@ renderer.domElement.addEventListener('click', e => {
   raycaster.setFromCamera(mouse, camera);
 
   const hits = raycaster.intersectObjects(edgeMeshes);
+  console.log('Click hits:', hits.length, 'edgeMeshes:', edgeMeshes.length);
   if (hits.length === 0) return;
 
   const edgeId = hits[0].object.userData.edgeId;
+  console.log('edgeId:', edgeId, 'edges length:', state.edges.length);
+  if (edgeId === undefined || edgeId >= state.edges.length) { console.warn('Bad edgeId', edgeId); return; }
   if (state.edges[edgeId].owner !== null) return; // Already claimed
 
   const newTris = claimEdge(edgeId, 'user');
+  console.log('claimed edge', edgeId, 'newTris:', newTris);
   endUserTurn(newTris);
   updateScoreDisplay();
   checkStageAdvance();
