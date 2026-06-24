@@ -4,13 +4,13 @@
 
 A real-time edge-claiming game built with Three.js. Open `tryangle.html` in your browser — no build step, no dependencies to install.
 
-**Live:** [https://multipaulllllllllllllllll.github.io/tryangles/tryangle.html]
+**Live:** [Play Tryangle](https://multipaulllllllllllllllll.github.io/tryangles/tryangle.html)
 
 ---
 
 ## How to Play
 
-1. **Click any edge** to claim it (cyan = you, red = bot)
+1. **Click any edge** to claim it (green = you, red = bot)
 2. **Own all 3 edges** of a triangular face to score +1
 3. **Race in real time** — the bot claims edges on a timer (no turns)
 4. **Fill 60%** of faces to advance, or have the lead when time runs out
@@ -44,8 +44,7 @@ A real-time edge-claiming game built with Three.js. Open `tryangle.html` in your
 
 ```
 tryangles/
-├── tryangle.html       — Current game (single self-contained file)
-├── triangle-game.html  — Earlier turn-based prototype
+├── tryangle.html       — Game (single self-contained file)
 ├── index.html          — GitHub Pages entry → tryangle.html
 ├── SPEC.md             — Original technical spec (partially outdated)
 └── README.md           — This file

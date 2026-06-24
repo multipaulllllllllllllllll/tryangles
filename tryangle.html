@@ -164,7 +164,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 #score-user .score-value {
-  color: var(--cyan);
+  color: var(--green);
   text-shadow: 0 0 12px rgba(0,232,255,0.5);
 }
 #score-bot .score-value {
@@ -375,7 +375,7 @@ body {
   pointer-events: none;
   opacity: 0;
 }
-#triangle-flash.user { background: radial-gradient(circle at center, rgba(0,232,255,0.14) 0%, transparent 65%); }
+#triangle-flash.user { background: radial-gradient(circle at center, rgba(57,255,20,0.16) 0%, transparent 65%); }
 #triangle-flash.bot { background: radial-gradient(circle at center, rgba(255,45,85,0.14) 0%, transparent 65%); }
 #triangle-flash.show { animation: flash-in 0.6s forwards; }
 @keyframes flash-in {
@@ -483,10 +483,10 @@ const COL = {
   LINE_FREE: 0xe878ff,
   LINE_HOVER: 0xffffff,
   LINE_GLOW: 0x66ffff,
-  USER: 0x00ffff,
-  BOT: 0xff0066,
-  TRI_USER: 0x00ffff,
-  TRI_BOT: 0xff0066,
+  USER: 0x39ff14,
+  BOT: 0xff2222,
+  TRI_USER: 0x39ff14,
+  TRI_BOT: 0xff2222,
   VERT: 0xdd99ff,
   SHELL: 0x120e22,
   STAR: 0xe0d4ff,
@@ -1023,8 +1023,8 @@ function hexToRGB(hex, boost = 1) {
 function updateEdgeColor(edgeId, owner) {
   if (!edgeLineSegmentsMesh) return;
   const colors = edgeLineSegmentsMesh.geometry.attributes.color.array;
-  const [r, g, b] = owner === 'user' ? hexToRGB(COL.USER, 2.0)
-                : owner === 'bot'  ? hexToRGB(COL.BOT, 2.0)
+  const [r, g, b] = owner === 'user' ? hexToRGB(COL.USER, 2.5)
+                : owner === 'bot'  ? hexToRGB(COL.BOT, 2.5)
                 :                     hexToRGB(COL.LINE_FREE, 1.75);
   const base = edgeId * 6;
   colors[base] = r; colors[base + 1] = g; colors[base + 2] = b;
@@ -1079,7 +1079,7 @@ function updateTriangleFill(triId, owner) {
   const entry = state.triangleMeshes.find(t => t.triId === triId);
   if (!entry) return;
   entry.mesh.material.color.set(owner === 'user' ? COL.TRI_USER : COL.TRI_BOT);
-  entry.mesh.material.opacity = 0.55;
+  entry.mesh.material.opacity = 0.62;
   entry.owner = owner;
 }
 
