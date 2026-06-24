@@ -480,15 +480,16 @@ const STAGES = [
 
 const COL = {
   BG: 0x07060f,
-  LINE_FREE: 0x4a4570,
-  LINE_HOVER: 0x9d8cff,
-  USER: 0x00e8ff,
-  BOT: 0xff2d55,
-  TRI_USER: 0x00e8ff,
-  TRI_BOT: 0xff2d55,
-  VERT: 0x6a5acd,
-  SHELL: 0x1a1530,
-  STAR: 0xc8c0ff,
+  LINE_FREE: 0xe878ff,
+  LINE_HOVER: 0xffffff,
+  LINE_GLOW: 0x66ffff,
+  USER: 0x00ffff,
+  BOT: 0xff0066,
+  TRI_USER: 0x00ffff,
+  TRI_BOT: 0xff0066,
+  VERT: 0xdd99ff,
+  SHELL: 0x120e22,
+  STAR: 0xe0d4ff,
   GRID: 0x00e8ff,
 };
 
@@ -749,8 +750,14 @@ let vertDotGeo = null;
 let vertDotMat = null;
 const edgePickMeshes = [];
 let edgePickMat = null;
+let hoverGlowLine = null;
 let pointerDownPos = null;
 let suppressClick = false;
+
+function setCanvasCursor(mode) {
+  const cursors = { grab: 'grab', grabbing: 'grabbing', edge: 'pointer' };
+  renderer.domElement.style.cursor = cursors[mode] || 'default';
+}
 
 function makePolyhedronGeometry(shape, detail, radius) {
   switch (shape) {
@@ -832,6 +839,13 @@ function clearPolyhedron() {
     edgePickMat = null;
   }
 
+  if (hoverGlowLine) {
+    edgeLineGroup.remove(hoverGlowLine);
+    hoverGlowLine.geometry.dispose();
+    hoverGlowLine.material.dispose();
+    hoverGlowLine = null;
+  }
+
   if (edgeLineSegmentsMesh) {
     edgeLineGroup.remove(edgeLineSegmentsMesh);
     edgeLineSegmentsMesh.geometry.dispose();
@@ -879,7 +893,7 @@ function createEdgeMeshes(edges) {
     const base = e.id * 6;
     positions[base] = e.from[0]; positions[base + 1] = e.from[1]; positions[base + 2] = e.from[2];
     positions[base + 3] = e.to[0]; positions[base + 4] = e.to[1]; positions[base + 5] = e.to[2];
-    const [r, g, b] = hexToRGB(COL.LINE_FREE);
+    const [r, g, b] = hexToRGB(COL.LINE_FREE, 1.75);
     colors[base] = r; colors[base + 1] = g; colors[base + 2] = b;
     colors[base + 3] = r; colors[base + 4] = g; colors[base + 5] = b;
   }
@@ -964,7 +978,7 @@ function createShellMesh(triangles, verts) {
   const mat = new THREE.MeshBasicMaterial({
     color: COL.SHELL,
     transparent: true,
-    opacity: 0.18,
+    opacity: 0.1,
     side: THREE.DoubleSide,
     depthWrite: false,
   });
@@ -998,38 +1012,74 @@ function buildPolyhedronForStage(stageIndex) {
   controls.update();
 }
 
-function hexToRGB(hex) {
-  return [(hex >> 16 & 255) / 255, (hex >> 8 & 255) / 255, (hex & 255) / 255];
+function hexToRGB(hex, boost = 1) {
+  return [
+    (hex >> 16 & 255) / 255 * boost,
+    (hex >> 8 & 255) / 255 * boost,
+    (hex & 255) / 255 * boost,
+  ];
 }
 
 function updateEdgeColor(edgeId, owner) {
   if (!edgeLineSegmentsMesh) return;
   const colors = edgeLineSegmentsMesh.geometry.attributes.color.array;
-  const [r, g, b] = owner === 'user' ? hexToRGB(COL.USER)
-                : owner === 'bot'  ? hexToRGB(COL.BOT)
-                :                     hexToRGB(COL.LINE_FREE);
+  const [r, g, b] = owner === 'user' ? hexToRGB(COL.USER, 2.0)
+                : owner === 'bot'  ? hexToRGB(COL.BOT, 2.0)
+                :                     hexToRGB(COL.LINE_FREE, 1.75);
   const base = edgeId * 6;
   colors[base] = r; colors[base + 1] = g; colors[base + 2] = b;
   colors[base + 3] = r; colors[base + 4] = g; colors[base + 5] = b;
   edgeLineSegmentsMesh.geometry.attributes.color.needsUpdate = true;
 }
 
+function ensureHoverGlow() {
+  if (hoverGlowLine) return;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+  const mat = new THREE.LineBasicMaterial({
+    color: COL.LINE_GLOW,
+    transparent: true,
+    opacity: 1,
+    blending: THREE.AdditiveBlending,
+    depthTest: false,
+    depthWrite: false,
+  });
+  hoverGlowLine = new THREE.Line(geo, mat);
+  hoverGlowLine.renderOrder = 12;
+  hoverGlowLine.frustumCulled = false;
+  hoverGlowLine.visible = false;
+  edgeLineGroup.add(hoverGlowLine);
+}
+
 function setEdgeHover(edgeId, on) {
   if (!edgeLineSegmentsMesh || !state.edges[edgeId]) return;
   if (state.edges[edgeId].owner != null) return;
+
   const colors = edgeLineSegmentsMesh.geometry.attributes.color.array;
-  const [r, g, b] = on ? hexToRGB(COL.LINE_HOVER) : hexToRGB(COL.LINE_FREE);
+  const [r, g, b] = on ? hexToRGB(COL.LINE_HOVER, 2.0) : hexToRGB(COL.LINE_FREE, 1.75);
   const base = edgeId * 6;
   colors[base] = r; colors[base + 1] = g; colors[base + 2] = b;
   colors[base + 3] = r; colors[base + 4] = g; colors[base + 5] = b;
   edgeLineSegmentsMesh.geometry.attributes.color.needsUpdate = true;
+
+  if (on) {
+    ensureHoverGlow();
+    const e = state.edges[edgeId];
+    const pos = hoverGlowLine.geometry.attributes.position.array;
+    pos[0] = e.from[0]; pos[1] = e.from[1]; pos[2] = e.from[2];
+    pos[3] = e.to[0];   pos[4] = e.to[1];   pos[5] = e.to[2];
+    hoverGlowLine.geometry.attributes.position.needsUpdate = true;
+    hoverGlowLine.visible = true;
+  } else if (hoverGlowLine) {
+    hoverGlowLine.visible = false;
+  }
 }
 
 function updateTriangleFill(triId, owner) {
   const entry = state.triangleMeshes.find(t => t.triId === triId);
   if (!entry) return;
   entry.mesh.material.color.set(owner === 'user' ? COL.TRI_USER : COL.TRI_BOT);
-  entry.mesh.material.opacity = 0.48;
+  entry.mesh.material.opacity = 0.55;
   entry.owner = owner;
 }
 
@@ -1381,7 +1431,7 @@ function resetEdgeState() {
   }
   if (edgeLineSegmentsMesh) {
     const colors = edgeLineSegmentsMesh.geometry.attributes.color.array;
-    const [r, g, b] = hexToRGB(COL.LINE_FREE);
+    const [r, g, b] = hexToRGB(COL.LINE_FREE, 1.75);
     for (let i = 0; i < state.edges.length; i++) {
       const base = i * 6;
       colors[base] = r; colors[base + 1] = g; colors[base + 2] = b;
@@ -1410,6 +1460,7 @@ function initStage(stageIndex) {
   hideAllScreens();
 
   state.isPlaying = true;
+  setCanvasCursor('grab');
   startTimer();
   startBotTimer();
   audio.resume().then(() => audio.startMusic());
@@ -1466,14 +1517,16 @@ function updateEdgeHover(clientX, clientY) {
       audio.sfxHover();
     }
   }
-  renderer.domElement.style.cursor = newHover !== null ? 'pointer' : 'grab';
+  if (!suppressClick && pointerDownPos === null) {
+    setCanvasCursor(newHover !== null ? 'edge' : 'grab');
+  }
 }
 
 renderer.domElement.addEventListener('mousemove', e => updateEdgeHover(e.clientX, e.clientY));
 renderer.domElement.addEventListener('mouseleave', () => {
   if (state.hoveredEdge !== null) setEdgeHover(state.hoveredEdge, false);
   state.hoveredEdge = null;
-  renderer.domElement.style.cursor = 'grab';
+  setCanvasCursor('grab');
 });
 
 function isOverlayBlocking() {
@@ -1502,6 +1555,7 @@ function handleClaim(clientX, clientY) {
 renderer.domElement.addEventListener('pointerdown', e => {
   pointerDownPos = { x: e.clientX, y: e.clientY };
   suppressClick = false;
+  setCanvasCursor('grabbing');
 });
 
 renderer.domElement.addEventListener('pointermove', e => {
@@ -1511,7 +1565,10 @@ renderer.domElement.addEventListener('pointermove', e => {
   if (dx * dx + dy * dy > 36) suppressClick = true;
 });
 
-renderer.domElement.addEventListener('pointerup', () => { pointerDownPos = null; });
+renderer.domElement.addEventListener('pointerup', () => {
+  pointerDownPos = null;
+  setCanvasCursor(state.hoveredEdge !== null ? 'edge' : 'grab');
+});
 
 renderer.domElement.addEventListener('click', e => handleClaim(e.clientX, e.clientY));
 
@@ -1543,6 +1600,7 @@ animate();
 
 buildPolyhedronForStage(0);
 showScreen('start-screen');
+setCanvasCursor('grab');
 
 function bindScreenButton(id, handler) {
   document.getElementById(id).addEventListener('click', e => {
