@@ -4,7 +4,7 @@
 
 A real-time edge-claiming game built with Three.js. Open `tryangle.html` in your browser — no build step, no dependencies to install.
 
-**Live:** [multipaulllllllllllllllll.github.io/tryangles](https://multipaulllllllllllllllll.github.io/tryangles)
+**Live:** [https://multipaulllllllllllllllll.github.io/tryangles/tryangle.html]
 
 ---
 
