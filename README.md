@@ -1,38 +1,31 @@
-# TRIANGULATE
+# Tryangle
 
-> Claim edges. Complete triangles. Beat the bot.
+> Claim edges on 3D shapes. Race the bot. Complete the faces.
 
-A real-time competitive edge-claiming game built with Three.js. Open `triangle-game.html` directly in your browser — no build step, no dependencies to install.
+A real-time edge-claiming game built with Three.js. Open `tryangle.html` in your browser — no build step, no dependencies to install.
 
-**Live:** `https://multipaulllllllllllllllll.github.io/tryangles`
+**Live:** [multipaulllllllllllllllll.github.io/tryangles](https://multipaulllllllllllllllll.github.io/tryangles)
 
 ---
 
 ## How to Play
 
-1. **Click any edge** (line between two vertices) to claim it — it turns cyan
-2. **Complete a triangle** (claim all 3 edges) = **+1 point + bonus turn**
-3. **The bot** (cardinal red) takes turns after you
-4. **Fill 60%** of available triangles before time runs out → advance to next stage
-5. **Time expires** → whoever has more completed triangles wins
+1. **Click any edge** to claim it (cyan = you, red = bot)
+2. **Own all 3 edges** of a triangular face to score +1
+3. **Race in real time** — the bot claims edges on a timer (no turns)
+4. **Fill 60%** of faces to advance, or have the lead when time runs out
+5. **Clear all edges** with the lead to advance early
 
 ---
 
 ## Stages
 
-| Stage | Triangles | Time |
-|-------|-----------|------|
-| 1 — Warm Up | 4 | 60s |
-| 2 — Getting Busy | 9 | 70s |
-| 3 — Serious | 16 | 80s |
-| 4 — Master | 25 | 90s |
-
----
-
-## Bot AI
-
-- **Stages 1–2** — random edge selection
-- **Stages 3–4** — greedy: completes its own triangles first, then blocks your open triangles
+| Stage | Shape | Faces | Time | Bot interval |
+|-------|-------|-------|------|--------------|
+| 1 | Tetrahedron | 4 | 60s | 3.5s |
+| 2 | Octahedron | 8 | 70s | 2.5s |
+| 3 | Icosahedron | 20 | 80s | 1.8s |
+| 4 | Subdivided icosahedron | 80 | 90s | 1.0s |
 
 ---
 
@@ -40,9 +33,10 @@ A real-time competitive edge-claiming game built with Three.js. Open `triangle-g
 
 | Input | Action |
 |-------|--------|
-| Click edge | Claim edge (your turn) |
-| Scroll | Zoom in/out |
+| Click edge | Claim edge |
+| Scroll | Zoom |
 | Drag | Rotate view |
+| ♪ ON/OFF | Toggle 8-bit music & SFX |
 
 ---
 
@@ -50,22 +44,29 @@ A real-time competitive edge-claiming game built with Three.js. Open `triangle-g
 
 ```
 tryangles/
-├── SPEC.md            — Full technical specification
-├── triangle-game.html  — The game (single self-contained file)
-└── README.md          — This file
+├── tryangle.html       — Current game (single self-contained file)
+├── triangle-game.html  — Earlier turn-based prototype
+├── index.html          — GitHub Pages entry → tryangle.html
+├── SPEC.md             — Original technical spec (partially outdated)
+└── README.md           — This file
 ```
 
 ---
 
 ## Tech Stack
 
-- **Three.js 0.163.0** — 3D rendering (CDN)
-- **OrbitControls** — camera zoom/rotate
+- **Three.js 0.163.0** — 3D polyhedra, orbit camera (CDN)
+- **Web Audio API** — procedural 8-bit music and sound effects
 - **Vanilla HTML/CSS/JS** — no build tools
-- **JetBrains Mono + Archivo Black** — typography via Google Fonts
+- **Press Start 2P + Orbitron** — arcade typography via Google Fonts
 
 ---
 
-## Dev Notes
+## Run Locally
 
-Open `triangle-game.html` in a browser. Use **F12 → Console** for debug output. The file is ~1,380 lines — intentionally kept as a single artifact for easy sharing and zero-friction deployment.
+```bash
+python3 -m http.server 8000
+# → http://localhost:8000/tryangle.html
+```
+
+Or open `tryangle.html` directly in Chrome, Firefox, or Safari.

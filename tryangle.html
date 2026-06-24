@@ -1,0 +1,1571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tryangle — Race for the Edges</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #07060f;
+  --surface: #12101c;
+  --border: #2a2540;
+  --muted: #3d3658;
+  --text: #eef0ff;
+  --sub: #8b86a8;
+  --red: #ff2d55;
+  --red-dim: #991a33;
+  --cyan: #00e8ff;
+  --cyan-dim: #0088aa;
+  --green: #39ff14;
+  --amber: #ffcc00;
+  --purple: #9d4edd;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Orbitron', sans-serif;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  user-select: none;
+}
+
+#canvas-wrap { position: fixed; inset: 0; }
+
+#crt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.12) 0px,
+    rgba(0, 0, 0, 0.12) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  opacity: 0.3;
+}
+
+#vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.55) 100%);
+}
+
+.text-3d-cyan {
+  color: var(--cyan);
+  text-shadow:
+    0 1px 0 #006b80,
+    0 2px 0 #005566,
+    0 3px 0 #003d4d,
+    0 4px 12px rgba(0,0,0,0.6),
+    0 0 24px rgba(0,232,255,0.45);
+}
+
+.text-3d-red {
+  color: var(--red);
+  text-shadow:
+    0 1px 0 #801020,
+    0 2px 0 #660818,
+    0 3px 0 #4d0610,
+    0 4px 12px rgba(0,0,0,0.6),
+    0 0 24px rgba(255,45,85,0.45);
+}
+
+.text-3d-green {
+  color: var(--green);
+  text-shadow:
+    0 1px 0 #1a8010,
+    0 2px 0 #126608,
+    0 3px 0 #0a4d06,
+    0 4px 12px rgba(0,0,0,0.6),
+    0 0 24px rgba(57,255,20,0.4);
+}
+
+#hud {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  z-index: 10;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(7,6,15,0.92) 0%, transparent 100%);
+}
+
+#hud-title {
+  font-family: 'Press Start 2P', cursive;
+  font-size: 14px;
+  line-height: 1.6;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+#hud-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+#stage-label {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--sub);
+  text-transform: uppercase;
+}
+
+#timer-display {
+  font-family: 'Press Start 2P', cursive;
+  font-size: 28px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-shadow: 0 0 16px rgba(238,240,255,0.35);
+  transition: color 0.3s;
+}
+#timer-display.warn { color: var(--amber); }
+#timer-display.danger { color: var(--red); animation: pulse 0.5s infinite alternate; }
+
+@keyframes pulse {
+  from { opacity: 1; }
+  to { opacity: 0.5; }
+}
+
+#score-panel { display: flex; gap: 32px; align-items: center; }
+
+.score-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.score-label {
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: var(--sub);
+  text-transform: uppercase;
+}
+
+.score-value {
+  font-family: 'Press Start 2P', cursive;
+  font-size: 18px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+#score-user .score-value {
+  color: var(--cyan);
+  text-shadow: 0 0 12px rgba(0,232,255,0.5);
+}
+#score-bot .score-value {
+  color: var(--red);
+  text-shadow: 0 0 12px rgba(255,45,85,0.5);
+}
+
+.score-divider {
+  font-size: 22px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+#bottom-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px 28px;
+  z-index: 10;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(7,6,15,0.92) 0%, transparent 100%);
+}
+
+#audio-toggle {
+  position: fixed;
+  bottom: 78px;
+  left: 20px;
+  z-index: 11;
+  pointer-events: all;
+  font-family: 'Press Start 2P', cursive;
+  font-size: 8px;
+  padding: 10px 12px;
+  background: rgba(18,16,28,0.85);
+  border: 2px solid var(--border);
+  color: var(--sub);
+  cursor: pointer;
+  text-transform: uppercase;
+  box-shadow: 0 4px 0 #1a1530, 0 0 12px rgba(157,78,221,0.2);
+  transition: transform 0.1s, border-color 0.2s, color 0.2s;
+}
+#audio-toggle:hover { color: var(--cyan); border-color: var(--cyan-dim); }
+#audio-toggle:active { transform: translateY(2px); box-shadow: 0 2px 0 #1a1530; }
+#audio-toggle.muted { color: var(--red); border-color: var(--red-dim); }
+
+#bot-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 120px;
+}
+
+#bot-status-label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--sub);
+  text-transform: uppercase;
+}
+
+#bot-countdown {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--red);
+  font-variant-numeric: tabular-nums;
+}
+
+#bot-timer-bar-wrap {
+  width: 160px;
+  height: 4px;
+  background: var(--muted);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+#bot-timer-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--red-dim), var(--red));
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.1s linear;
+  box-shadow: 0 0 8px rgba(255,45,85,0.6);
+}
+
+#progress-bar-wrap {
+  width: 200px;
+  height: 6px;
+  background: var(--muted);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+#progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1a8010, var(--green));
+  border-radius: 2px;
+  transition: width 0.4s ease;
+  width: 0%;
+  box-shadow: 0 0 8px rgba(57,255,20,0.5);
+}
+
+#progress-label {
+  font-size: 11px;
+  color: var(--sub);
+  letter-spacing: 1px;
+}
+
+.screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(20,14,40,0.95) 0%, rgba(7,6,15,0.98) 70%);
+  backdrop-filter: blur(8px);
+  gap: 24px;
+  opacity: 1;
+  transition: opacity 0.4s;
+}
+.screen.hidden { opacity: 0; pointer-events: none; visibility: hidden; }
+
+.screen-title {
+  font-family: 'Press Start 2P', cursive;
+  font-size: 28px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.screen-sub {
+  font-size: 10px;
+  color: var(--sub);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  max-width: 520px;
+  text-align: center;
+  line-height: 2.2;
+}
+
+.btn {
+  margin-top: 12px;
+  padding: 16px 28px;
+  background: linear-gradient(180deg, #ff4466 0%, var(--red) 50%, #cc1133 100%);
+  color: #fff;
+  border: 2px solid #ff6680;
+  font-family: 'Press Start 2P', cursive;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  pointer-events: all;
+  box-shadow: 0 6px 0 #801020, 0 0 20px rgba(255,45,85,0.35);
+  transition: transform 0.1s, box-shadow 0.1s, filter 0.2s;
+}
+.btn:hover { filter: brightness(1.1); transform: translateY(-2px); box-shadow: 0 8px 0 #801020, 0 0 28px rgba(255,45,85,0.5); }
+.btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #801020; }
+
+#win-screen .screen-title { color: var(--green); }
+#lose-screen .screen-title { color: var(--red); }
+#advance-screen .screen-title { color: var(--cyan); }
+#start-screen .screen-title { color: var(--red); }
+
+#bot-pulse {
+  position: fixed;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(200,16,46,0.12);
+  border: 1px solid var(--red-dim);
+  padding: 8px 18px;
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--red);
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+#bot-pulse.show { opacity: 1; }
+
+#instructions {
+  position: fixed;
+  bottom: 70px;
+  right: 28px;
+  z-index: 10;
+  pointer-events: none;
+  font-size: 11px;
+  color: var(--sub);
+  letter-spacing: 1px;
+  line-height: 1.8;
+  text-align: right;
+}
+
+#triangle-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0;
+}
+#triangle-flash.user { background: radial-gradient(circle at center, rgba(0,232,255,0.14) 0%, transparent 65%); }
+#triangle-flash.bot { background: radial-gradient(circle at center, rgba(255,45,85,0.14) 0%, transparent 65%); }
+#triangle-flash.show { animation: flash-in 0.6s forwards; }
+@keyframes flash-in {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+</style>
+</head>
+<body>
+
+<div id="canvas-wrap"></div>
+<div id="vignette"></div>
+<div id="crt-overlay"></div>
+<div id="triangle-flash"></div>
+
+<button id="audio-toggle" type="button" title="Toggle sound">♪ ON</button>
+
+<div id="hud">
+  <div id="hud-title" class="text-3d-red">Tryangle</div>
+  <div id="hud-center">
+    <div id="stage-label">Stage 1</div>
+    <div id="timer-display">60</div>
+  </div>
+  <div id="score-panel">
+    <div class="score-block" id="score-user">
+      <div class="score-label">You</div>
+      <div class="score-value" id="user-score">0</div>
+    </div>
+    <div class="score-divider">:</div>
+    <div class="score-block" id="score-bot">
+      <div class="score-label">Bot</div>
+      <div class="score-value" id="bot-score">0</div>
+    </div>
+  </div>
+</div>
+
+<div id="bottom-bar">
+  <div id="bot-status">
+    <span id="bot-status-label">Bot strikes in</span>
+    <span id="bot-countdown">—</span>
+  </div>
+  <div id="bot-timer-bar-wrap"><div id="bot-timer-bar-fill"></div></div>
+  <div id="progress-bar-wrap"><div id="progress-bar-fill"></div></div>
+  <div id="progress-label">0%</div>
+</div>
+
+<div id="bot-pulse">Bot claimed an edge</div>
+
+<div id="instructions">
+  Click edges anytime — race the bot<br>
+  Own all 3 edges of a face = +1 triangle<br>
+  Fill 60% to advance · Most triangles wins
+</div>
+
+<div id="start-screen" class="screen">
+  <div class="screen-title text-3d-red">Tryangle</div>
+  <div class="screen-sub">Claim edges on a 3D shape. Complete triangular faces before the bot.<br>Race in real time — no turns. 4 shapes, rising speed.</div>
+  <button class="btn" id="btn-start">Start Game</button>
+</div>
+
+<div id="advance-screen" class="screen hidden">
+  <div class="screen-title text-3d-cyan">Stage Clear!</div>
+  <div class="screen-sub" id="advance-sub"></div>
+  <button class="btn" id="btn-next">Next Stage</button>
+</div>
+
+<div id="win-screen" class="screen hidden">
+  <div class="screen-title text-3d-green">You Win!</div>
+  <div class="screen-sub" id="win-sub">Outstanding. The bot had no answer.</div>
+  <button class="btn" id="btn-win-restart">Play Again</button>
+</div>
+
+<div id="lose-screen" class="screen hidden">
+  <div class="screen-title text-3d-red">Bot Wins</div>
+  <div class="screen-sub" id="lose-sub"></div>
+  <button class="btn" id="btn-lose-restart">Try Again</button>
+</div>
+
+<div id="timeout-screen" class="screen hidden">
+  <div class="screen-title" style="color:var(--amber);text-shadow:0 0 20px rgba(255,204,0,0.5)">Time's Up!</div>
+  <div class="screen-sub" id="timeout-sub"></div>
+  <button class="btn" id="btn-timeout-restart">Try Again</button>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.163.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.163.0/examples/jsm/"
+  }
+}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const STAGES = [
+  { shape: 'tetrahedron',  detail: 0, radius: 3.0, time: 60, threshold: 0.60, botInterval: 3500, label: 'Stage 1 — Tetrahedron' },
+  { shape: 'octahedron',   detail: 0, radius: 3.5, time: 70, threshold: 0.60, botInterval: 2500, label: 'Stage 2 — Octahedron' },
+  { shape: 'icosahedron',  detail: 0, radius: 4.0, time: 80, threshold: 0.60, botInterval: 1800, label: 'Stage 3 — Icosahedron' },
+  { shape: 'icosahedron',  detail: 1, radius: 4.0, time: 90, threshold: 0.60, botInterval: 1000, label: 'Stage 4 — Master' },
+];
+
+const COL = {
+  BG: 0x07060f,
+  LINE_FREE: 0x4a4570,
+  LINE_HOVER: 0x9d8cff,
+  USER: 0x00e8ff,
+  BOT: 0xff2d55,
+  TRI_USER: 0x00e8ff,
+  TRI_BOT: 0xff2d55,
+  VERT: 0x6a5acd,
+  SHELL: 0x1a1530,
+  STAR: 0xc8c0ff,
+  GRID: 0x00e8ff,
+};
+
+const EDGE_PICK_SIZE = 0.28;
+
+// ═══════════════════════════════════════════════════════
+// 8-BIT AUDIO (Web Audio API — no external files)
+// ═══════════════════════════════════════════════════════
+
+const audio = {
+  ctx: null,
+  musicGain: null,
+  sfxGain: null,
+  musicId: null,
+  melodyStep: 0,
+  enabled: true,
+  musicOn: false,
+  lastHoverAt: 0,
+
+  init() {
+    if (this.ctx) return;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    this.ctx = new Ctx();
+    this.musicGain = this.ctx.createGain();
+    this.sfxGain = this.ctx.createGain();
+    this.musicGain.gain.value = 0.1;
+    this.sfxGain.gain.value = 0.22;
+    this.musicGain.connect(this.ctx.destination);
+    this.sfxGain.connect(this.ctx.destination);
+  },
+
+  async resume() {
+    this.init();
+    if (!this.ctx) return;
+    if (this.ctx.state === 'suspended') await this.ctx.resume();
+  },
+
+  setEnabled(on) {
+    this.enabled = on;
+    const btn = document.getElementById('audio-toggle');
+    if (btn) {
+      btn.textContent = on ? '♪ ON' : '♪ OFF';
+      btn.classList.toggle('muted', !on);
+    }
+    if (!on) this.stopMusic();
+    else if (state.isPlaying && !state.isGameOver) this.startMusic();
+  },
+
+  tone(freq, dur, type = 'square', vol = 0.15, dest = null, detune = 0) {
+    if (!this.enabled || !this.ctx) return;
+    const t0 = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    osc.detune.value = detune;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g);
+    g.connect(dest || this.sfxGain);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+  },
+
+  sfxClaim(owner) {
+    if (owner === 'user') {
+      this.tone(880, 0.07, 'square', 0.12);
+      this.tone(1320, 0.05, 'square', 0.06);
+    } else {
+      this.tone(220, 0.09, 'square', 0.1);
+      this.tone(165, 0.06, 'square', 0.06);
+    }
+  },
+
+  sfxTriangle(owner) {
+    const base = owner === 'user' ? 523 : 392;
+    [0, 4, 7].forEach((semi, i) => {
+      this.tone(base * Math.pow(2, semi / 12), 0.1, 'square', 0.1 - i * 0.02, null, 0);
+    });
+    this.tone(base * 2, 0.15, 'triangle', 0.08);
+  },
+
+  sfxHover() {
+    const now = performance.now();
+    if (now - this.lastHoverAt < 120) return;
+    this.lastHoverAt = now;
+    this.tone(1200, 0.03, 'square', 0.04);
+  },
+
+  sfxMenu() {
+    this.tone(660, 0.06, 'square', 0.1);
+    this.tone(990, 0.08, 'square', 0.08);
+  },
+
+  sfxAdvance() {
+    [523, 659, 784, 1047].forEach((f, i) => {
+      setTimeout(() => this.tone(f, 0.12, 'square', 0.12), i * 90);
+    });
+  },
+
+  sfxWin() {
+    const notes = [523, 659, 784, 1047, 1319];
+    notes.forEach((f, i) => setTimeout(() => this.tone(f, 0.18, 'square', 0.12), i * 110));
+  },
+
+  sfxLose() {
+    [392, 349, 311, 262].forEach((f, i) => {
+      setTimeout(() => this.tone(f, 0.2, 'square', 0.1), i * 140);
+    });
+  },
+
+  startMusic() {
+    if (!this.enabled || !this.ctx || this.musicOn) return;
+    this.musicOn = true;
+    const MELODY = [523, 587, 659, 698, 784, 698, 659, 587, 523, 440, 494, 523, 659, 784, 880, 784];
+    const BASS =   [131, 131, 165, 165, 196, 196, 165, 165, 131, 110, 110, 131, 165, 196, 220, 196];
+    const beat = 220;
+
+    const tick = () => {
+      if (!this.musicOn || !this.enabled) return;
+      const i = this.melodyStep % MELODY.length;
+      const t0 = this.ctx.currentTime;
+      const playNote = (freq, type, vol) => {
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(vol, t0 + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + beat / 1000 * 0.85);
+        osc.connect(g);
+        g.connect(this.musicGain);
+        osc.start(t0);
+        osc.stop(t0 + beat / 1000);
+      };
+      playNote(MELODY[i], 'square', 0.12);
+      playNote(BASS[i], 'triangle', 0.07);
+      this.melodyStep++;
+    };
+
+    tick();
+    this.musicId = setInterval(tick, beat);
+  },
+
+  stopMusic() {
+    this.musicOn = false;
+    if (this.musicId) clearInterval(this.musicId);
+    this.musicId = null;
+  },
+};
+
+let state = {
+  stage: 0,
+  pendingStage: null,
+  userScore: 0,
+  botScore: 0,
+  isGameOver: false,
+  isPlaying: false,
+  timer: 60,
+  timerInterval: null,
+  botTimerId: null,
+  botIntervalMs: 3500,
+  nextBotTick: 0,
+  edges: [],
+  triangles: [],
+  triangleMeshes: [],
+  verts: [],
+  edgeByVerts: new Map(),
+  hoveredEdge: null,
+};
+
+const wrap = document.getElementById('canvas-wrap');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(COL.BG);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+wrap.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(COL.BG, 0.02);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 2, 9);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.enablePan = false;
+controls.minDistance = 3;
+controls.maxDistance = 40;
+
+scene.add(new THREE.AmbientLight(0x6a5acd, 0.35));
+scene.add(new THREE.AmbientLight(0x111122, 0.4));
+const dir = new THREE.DirectionalLight(0xffffff, 0.75);
+dir.position.set(4, 8, 6);
+scene.add(dir);
+const rim = new THREE.DirectionalLight(0x00e8ff, 0.45);
+rim.position.set(-6, -2, -4);
+scene.add(rim);
+const fill = new THREE.DirectionalLight(0x9d4edd, 0.25);
+fill.position.set(0, -4, 4);
+scene.add(fill);
+
+function createStarfield(count = 1200) {
+  const pos = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const r = 30 + Math.random() * 70;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    pos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+    pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+    pos[i * 3 + 2] = r * Math.cos(phi);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.PointsMaterial({
+    color: COL.STAR,
+    size: 0.35,
+    transparent: true,
+    opacity: 0.7,
+    depthWrite: false,
+  });
+  return new THREE.Points(geo, mat);
+}
+scene.add(createStarfield());
+
+const floorGrid = new THREE.GridHelper(50, 50, COL.GRID, 0x1a1530);
+floorGrid.position.y = -5;
+floorGrid.material.opacity = 0.22;
+floorGrid.material.transparent = true;
+scene.add(floorGrid);
+
+const polyGroup = new THREE.Group();
+scene.add(polyGroup);
+
+const coreLight = new THREE.PointLight(0x00e8ff, 0.5, 18);
+polyGroup.add(coreLight);
+const botLight = new THREE.PointLight(0xff2d55, 0.25, 14);
+botLight.position.set(2, 1, -2);
+polyGroup.add(botLight);
+
+const edgeLineGroup = new THREE.Group();
+polyGroup.add(edgeLineGroup);
+
+const triFillGroup = new THREE.Group();
+polyGroup.add(triFillGroup);
+
+const vertGroup = new THREE.Group();
+polyGroup.add(vertGroup);
+
+let edgeLineSegmentsMesh = null;
+let shellMesh = null;
+let vertDotGeo = null;
+let vertDotMat = null;
+const edgePickMeshes = [];
+let edgePickMat = null;
+let pointerDownPos = null;
+let suppressClick = false;
+
+function makePolyhedronGeometry(shape, detail, radius) {
+  switch (shape) {
+    case 'tetrahedron': return new THREE.TetrahedronGeometry(radius, detail);
+    case 'octahedron': return new THREE.OctahedronGeometry(radius, detail);
+    case 'icosahedron': return new THREE.IcosahedronGeometry(radius, detail);
+    default: return new THREE.TetrahedronGeometry(radius, detail);
+  }
+}
+
+function buildPolyhedron(shape, detail, radius) {
+  const geo = makePolyhedronGeometry(shape, detail, radius);
+  const pos = geo.attributes.position;
+  const idx = geo.index;
+
+  const verts = [];
+  const vertKey = new Map();
+  const ek = (x, y, z) => `${x.toFixed(3)},${y.toFixed(3)},${z.toFixed(3)}`;
+
+  function getVert(i) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const key = ek(x, y, z);
+    if (vertKey.has(key)) return vertKey.get(key);
+    const id = verts.length;
+    verts.push([x, y, z]);
+    vertKey.set(key, id);
+    return id;
+  }
+
+  const triangles = [];
+  const edgeMap = new Map();
+  const edges = [];
+  let eid = 0, tid = 0;
+
+  const addEdge = (vi, vj) => {
+    const a = Math.min(vi, vj), b = Math.max(vi, vj);
+    const key = `${a}-${b}`;
+    if (edgeMap.has(key)) return edgeMap.get(key);
+    edgeMap.set(key, eid);
+    edges.push({ id: eid++, vi: a, vj: b, owner: null });
+    return eid - 1;
+  };
+
+  const addFace = (a, b, c) => {
+    const vi = getVert(a), vj = getVert(b), vk = getVert(c);
+    triangles.push({ id: tid++, vi, vj, vk, _owner: null });
+    addEdge(vi, vj);
+    addEdge(vj, vk);
+    addEdge(vi, vk);
+  };
+
+  if (idx) {
+    for (let i = 0; i < idx.count; i += 3) {
+      addFace(idx.getX(i), idx.getX(i + 1), idx.getX(i + 2));
+    }
+  } else {
+    for (let i = 0; i < pos.count; i += 3) {
+      addFace(i, i + 1, i + 2);
+    }
+  }
+
+  for (const e of edges) {
+    e.from = verts[e.vi];
+    e.to = verts[e.vj];
+  }
+
+  geo.dispose();
+  return { verts, edges, triangles, edgeMap };
+}
+
+function clearPolyhedron() {
+  for (const mesh of edgePickMeshes) {
+    edgeLineGroup.remove(mesh);
+    mesh.geometry.dispose();
+  }
+  edgePickMeshes.length = 0;
+  if (edgePickMat) {
+    edgePickMat.dispose();
+    edgePickMat = null;
+  }
+
+  if (edgeLineSegmentsMesh) {
+    edgeLineGroup.remove(edgeLineSegmentsMesh);
+    edgeLineSegmentsMesh.geometry.dispose();
+    edgeLineSegmentsMesh.material.dispose();
+    edgeLineSegmentsMesh = null;
+  }
+
+  if (shellMesh) {
+    polyGroup.remove(shellMesh);
+    shellMesh.geometry.dispose();
+    shellMesh.material.dispose();
+    shellMesh = null;
+  }
+
+  while (triFillGroup.children.length) {
+    const c = triFillGroup.children[0];
+    c.geometry.dispose();
+    c.material.dispose();
+    triFillGroup.remove(c);
+  }
+
+  vertGroup.clear();
+  if (vertDotGeo) { vertDotGeo.dispose(); vertDotGeo = null; }
+  if (vertDotMat) { vertDotMat.dispose(); vertDotMat = null; }
+
+  state.triangleMeshes.length = 0;
+}
+
+function createVertexDots(verts) {
+  vertDotGeo = new THREE.SphereGeometry(0.09, 10, 8);
+  vertDotMat = new THREE.MeshBasicMaterial({ color: COL.VERT, transparent: true, opacity: 0.85 });
+  for (const v of verts) {
+    const dot = new THREE.Mesh(vertDotGeo, vertDotMat);
+    dot.position.set(v[0], v[1], v[2]);
+    vertGroup.add(dot);
+  }
+}
+
+function createEdgeMeshes(edges) {
+  const count = edges.length;
+  const positions = new Float32Array(count * 6);
+  const colors = new Float32Array(count * 6);
+
+  for (const e of edges) {
+    const base = e.id * 6;
+    positions[base] = e.from[0]; positions[base + 1] = e.from[1]; positions[base + 2] = e.from[2];
+    positions[base + 3] = e.to[0]; positions[base + 4] = e.to[1]; positions[base + 5] = e.to[2];
+    const [r, g, b] = hexToRGB(COL.LINE_FREE);
+    colors[base] = r; colors[base + 1] = g; colors[base + 2] = b;
+    colors[base + 3] = r; colors[base + 4] = g; colors[base + 5] = b;
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  const mat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 1.0 });
+  edgeLineSegmentsMesh = new THREE.LineSegments(geo, mat);
+  edgeLineSegmentsMesh.renderOrder = 2;
+  edgeLineGroup.add(edgeLineSegmentsMesh);
+
+  edgePickMat = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+  });
+
+  for (const e of edges) {
+    const mx = (e.from[0] + e.to[0]) / 2;
+    const my = (e.from[1] + e.to[1]) / 2;
+    const mz = (e.from[2] + e.to[2]) / 2;
+    const dx = e.to[0] - e.from[0];
+    const dy = e.to[1] - e.from[1];
+    const dz = e.to[2] - e.from[2];
+    const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const radius = len / 2 + EDGE_PICK_SIZE;
+
+    const pickGeo = new THREE.SphereGeometry(radius, 8, 6);
+    const mesh = new THREE.Mesh(pickGeo, edgePickMat);
+    mesh.position.set(mx, my, mz);
+    mesh.userData.edgeId = e.id;
+    mesh.renderOrder = 3;
+    edgeLineGroup.add(mesh);
+    edgePickMeshes.push(mesh);
+  }
+}
+
+function createTriangleMeshes(triangles, verts) {
+  for (const t of triangles) {
+    const va = verts[t.vi], vb = verts[t.vj], vk = verts[t.vk];
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array([
+      va[0], va[1], va[2],
+      vb[0], vb[1], vb[2],
+      vk[0], vk[1], vk[2],
+    ]);
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.computeVertexNormals();
+
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.renderOrder = 1;
+    triFillGroup.add(mesh);
+    state.triangleMeshes.push({ mesh, triId: t.id, owner: null });
+  }
+}
+
+function createShellMesh(triangles, verts) {
+  const positions = [];
+  const indices = [];
+  for (const t of triangles) {
+    const base = positions.length / 3;
+    for (const vi of [t.vi, t.vj, t.vk]) {
+      positions.push(verts[vi][0], verts[vi][1], verts[vi][2]);
+    }
+    indices.push(base, base + 1, base + 2);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+
+  const mat = new THREE.MeshBasicMaterial({
+    color: COL.SHELL,
+    transparent: true,
+    opacity: 0.18,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  shellMesh = new THREE.Mesh(geo, mat);
+  shellMesh.renderOrder = 0;
+  polyGroup.add(shellMesh);
+}
+
+function buildPolyhedronForStage(stageIndex) {
+  clearPolyhedron();
+  const cfg = STAGES[stageIndex];
+  const { verts, edges, triangles } = buildPolyhedron(cfg.shape, cfg.detail, cfg.radius);
+
+  state.verts = verts;
+  state.edges = edges;
+  state.triangles = triangles;
+  state.edgeByVerts = new Map();
+  for (const e of edges) {
+    state.edgeByVerts.set(`${e.vi}-${e.vj}`, e.id);
+    state.edgeByVerts.set(`${e.vj}-${e.vi}`, e.id);
+  }
+
+  createShellMesh(triangles, verts);
+  createVertexDots(verts);
+  createEdgeMeshes(edges);
+  createTriangleMeshes(triangles, verts);
+
+  const r = cfg.radius;
+  camera.position.set(r * 0.4, r * 0.55, r * 2.4);
+  controls.target.set(0, 0, 0);
+  controls.update();
+}
+
+function hexToRGB(hex) {
+  return [(hex >> 16 & 255) / 255, (hex >> 8 & 255) / 255, (hex & 255) / 255];
+}
+
+function updateEdgeColor(edgeId, owner) {
+  if (!edgeLineSegmentsMesh) return;
+  const colors = edgeLineSegmentsMesh.geometry.attributes.color.array;
+  const [r, g, b] = owner === 'user' ? hexToRGB(COL.USER)
+                : owner === 'bot'  ? hexToRGB(COL.BOT)
+                :                     hexToRGB(COL.LINE_FREE);
+  const base = edgeId * 6;
+  colors[base] = r; colors[base + 1] = g; colors[base + 2] = b;
+  colors[base + 3] = r; colors[base + 4] = g; colors[base + 5] = b;
+  edgeLineSegmentsMesh.geometry.attributes.color.needsUpdate = true;
+}
+
+function setEdgeHover(edgeId, on) {
+  if (!edgeLineSegmentsMesh || !state.edges[edgeId]) return;
+  if (state.edges[edgeId].owner != null) return;
+  const colors = edgeLineSegmentsMesh.geometry.attributes.color.array;
+  const [r, g, b] = on ? hexToRGB(COL.LINE_HOVER) : hexToRGB(COL.LINE_FREE);
+  const base = edgeId * 6;
+  colors[base] = r; colors[base + 1] = g; colors[base + 2] = b;
+  colors[base + 3] = r; colors[base + 4] = g; colors[base + 5] = b;
+  edgeLineSegmentsMesh.geometry.attributes.color.needsUpdate = true;
+}
+
+function updateTriangleFill(triId, owner) {
+  const entry = state.triangleMeshes.find(t => t.triId === triId);
+  if (!entry) return;
+  entry.mesh.material.color.set(owner === 'user' ? COL.TRI_USER : COL.TRI_BOT);
+  entry.mesh.material.opacity = 0.48;
+  entry.owner = owner;
+}
+
+function getTrianglesForEdge(edgeId) {
+  const e = state.edges[edgeId];
+  const results = [];
+  for (const t of state.triangles) {
+    const vs = [t.vi, t.vj, t.vk];
+    if (vs.includes(e.vi) && vs.includes(e.vj)) results.push(t.id);
+  }
+  return results;
+}
+
+function edgeIdForVerts(a, b) {
+  return state.edgeByVerts.get(`${Math.min(a, b)}-${Math.max(a, b)}`);
+}
+
+function getTriangleOwner(triId) {
+  const t = state.triangles[triId];
+  if (!t) return null;
+  const vs = [t.vi, t.vj, t.vk];
+  const e1 = edgeIdForVerts(vs[0], vs[1]);
+  const e2 = edgeIdForVerts(vs[1], vs[2]);
+  const e3 = edgeIdForVerts(vs[0], vs[2]);
+  if (e1 === undefined || e2 === undefined || e3 === undefined) return null;
+  const o1 = state.edges[e1].owner;
+  const o2 = state.edges[e2].owner;
+  const o3 = state.edges[e3].owner;
+  if (o1 === null || o2 === null || o3 === null) return null;
+  if (o1 === o2 && o2 === o3) return o1;
+  return null;
+}
+
+function checkNewTriangles(owner) {
+  const completed = [];
+  for (const t of state.triangles) {
+    if (t._owner === owner) continue;
+    const triOwner = getTriangleOwner(t.id);
+    if (triOwner === owner) {
+      t._owner = owner;
+      completed.push(t.id);
+    }
+  }
+  return completed;
+}
+
+function claimEdge(edgeId, owner) {
+  if (!Number.isInteger(edgeId) || edgeId < 0 || edgeId >= state.edges.length) return [];
+  const edge = state.edges[edgeId];
+  if (!edge || edge.owner != null) return [];
+  edge.owner = owner;
+  updateEdgeColor(edgeId, owner);
+  audio.sfxClaim(owner);
+
+  const newTris = checkNewTriangles(owner);
+  for (const tid of newTris) {
+    updateTriangleFill(tid, owner);
+    triggerFlash(owner);
+    audio.sfxTriangle(owner);
+  }
+  return newTris;
+}
+
+function getAvailableEdges() {
+  return state.edges.filter(e => e.owner == null);
+}
+
+function countCompletedTriangles(owner) {
+  return state.triangles.filter(t => getTriangleOwner(t.id) === owner).length;
+}
+
+function getTotalTriangles() {
+  return state.triangles.length;
+}
+
+function onEdgeClaimed(owner, newTris, didClaim) {
+  if (!didClaim) return;
+  if (newTris.length > 0) {
+    if (owner === 'user') state.userScore += newTris.length;
+    else state.botScore += newTris.length;
+    updateScoreDisplay();
+    if (checkStageAdvance()) return;
+  }
+  if (getAvailableEdges().length === 0) checkBoardExhausted();
+}
+
+function updateScoreDisplay() {
+  document.getElementById('user-score').textContent = state.userScore;
+  document.getElementById('bot-score').textContent = state.botScore;
+  const total = getTotalTriangles();
+  const userPct = total > 0 ? Math.round((countCompletedTriangles('user') / total) * 100) : 0;
+  document.getElementById('progress-bar-fill').style.width = userPct + '%';
+  document.getElementById('progress-label').textContent = userPct + '%';
+}
+
+function triggerFlash(owner) {
+  const fl = document.getElementById('triangle-flash');
+  fl.className = owner === 'user' ? 'user show' : 'bot show';
+  setTimeout(() => { fl.className = ''; }, 600);
+}
+
+function startTimer() {
+  clearInterval(state.timerInterval);
+  const cfg = STAGES[state.stage];
+  state.timer = cfg.time;
+  updateTimerDisplay();
+  state.timerInterval = setInterval(() => {
+    state.timer--;
+    updateTimerDisplay();
+    if (state.timer <= 0) {
+      clearInterval(state.timerInterval);
+      onTimeUp();
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  const el = document.getElementById('timer-display');
+  el.textContent = state.timer;
+  el.className = state.timer <= 10 ? 'danger' : state.timer <= 20 ? 'warn' : '';
+}
+
+function stopTimer() {
+  clearInterval(state.timerInterval);
+}
+
+function startBotTimer() {
+  stopBotTimer();
+  const cfg = STAGES[state.stage];
+  state.botIntervalMs = cfg.botInterval;
+  state.nextBotTick = performance.now() + state.botIntervalMs;
+  state.botTimerId = setInterval(botTick, state.botIntervalMs);
+  document.getElementById('bot-countdown').textContent = (state.botIntervalMs / 1000).toFixed(1) + 's';
+}
+
+function stopBotTimer() {
+  if (state.botTimerId) clearInterval(state.botTimerId);
+  state.botTimerId = null;
+  document.getElementById('bot-countdown').textContent = '—';
+  document.getElementById('bot-timer-bar-fill').style.width = '0%';
+}
+
+function updateBotCountdown() {
+  if (!state.isPlaying || state.isGameOver || !state.botTimerId) return;
+  const remaining = Math.max(0, state.nextBotTick - performance.now());
+  document.getElementById('bot-countdown').textContent = (remaining / 1000).toFixed(1) + 's';
+  const pct = Math.min(100, (1 - remaining / state.botIntervalMs) * 100);
+  document.getElementById('bot-timer-bar-fill').style.width = pct + '%';
+}
+
+function botTick() {
+  if (state.isGameOver || !state.isPlaying) return;
+  state.nextBotTick = performance.now() + state.botIntervalMs;
+
+  const edgeId = chooseBotEdge();
+  if (edgeId === null) {
+    stopBotTimer();
+    checkBoardExhausted();
+    return;
+  }
+
+  const pulse = document.getElementById('bot-pulse');
+  pulse.classList.add('show');
+  setTimeout(() => pulse.classList.remove('show'), 400);
+
+  const newTris = claimEdge(edgeId, 'bot');
+  onEdgeClaimed('bot', newTris, true);
+}
+
+function chooseBotEdge() {
+  const available = getAvailableEdges();
+  if (available.length === 0) return null;
+
+  const stage = state.stage;
+  if (stage < 2) {
+    return available[Math.floor(Math.random() * available.length)].id;
+  }
+
+  for (const e of available) {
+    for (const tid of getTrianglesForEdge(e.id)) {
+      const t = state.triangles[tid];
+      const vs = [t.vi, t.vj, t.vk];
+      const owners = vs.map((a, i) => {
+        const b = vs[(i + 1) % 3];
+        const eid = edgeIdForVerts(a, b);
+        return state.edges[eid]?.owner;
+      });
+      const botOwned = owners.filter(o => o === 'bot').length;
+      const unclaimed = owners.filter(o => o === null).length;
+      if (botOwned === 2 && unclaimed === 1) return e.id;
+    }
+  }
+
+  for (const e of available) {
+    for (const tid of getTrianglesForEdge(e.id)) {
+      const t = state.triangles[tid];
+      const vs = [t.vi, t.vj, t.vk];
+      const owners = vs.map((a, i) => {
+        const b = vs[(i + 1) % 3];
+        const eid = edgeIdForVerts(a, b);
+        return state.edges[eid]?.owner;
+      });
+      const userOwned = owners.filter(o => o === 'user').length;
+      const unclaimed = owners.filter(o => o === null).length;
+      if (userOwned === 2 && unclaimed === 1) return e.id;
+    }
+  }
+
+  let bestEdge = available[0];
+  let bestScore = -1;
+  for (const e of available) {
+    let score = getTrianglesForEdge(e.id).length;
+    for (const tid of getTrianglesForEdge(e.id)) {
+      const t = state.triangles[tid];
+      const vs = [t.vi, t.vj, t.vk];
+      const owners = vs.map((a, i) => {
+        const b = vs[(i + 1) % 3];
+        const eid = edgeIdForVerts(a, b);
+        return state.edges[eid]?.owner;
+      });
+      if (owners.filter(o => o === 'bot').length === 1) score += 0.5;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestEdge = e;
+    }
+  }
+  return bestEdge.id;
+}
+
+function onTimeUp() {
+  const userTri = countCompletedTriangles('user');
+  const botTri = countCompletedTriangles('bot');
+
+  if (userTri > botTri) {
+    onStageCleared(`You: ${userTri} · Bot: ${botTri} — time expired`);
+    return;
+  }
+
+  stopTimer();
+  stopBotTimer();
+  state.isGameOver = true;
+  state.isPlaying = false;
+
+  if (botTri > userTri) {
+    document.getElementById('timeout-sub').textContent =
+      `You: ${userTri} · Bot: ${botTri} triangles — time expired`;
+    showScreen('timeout-screen');
+  } else {
+    document.getElementById('timeout-sub').textContent =
+      `Tie at ${userTri} each — time expired`;
+    showScreen('timeout-screen');
+  }
+}
+
+function onStageCleared(reason) {
+  stopTimer();
+  stopBotTimer();
+  state.isGameOver = true;
+  state.isPlaying = false;
+
+  const clearedIndex = state.stage;
+  const userTri = countCompletedTriangles('user');
+  const botTri = countCompletedTriangles('bot');
+  const total = getTotalTriangles();
+  const pct = total > 0 ? Math.round((userTri / total) * 100) : 0;
+  const clearedLabel = STAGES[clearedIndex].label;
+
+  if (clearedIndex >= STAGES.length - 1) {
+    state.pendingStage = null;
+    document.getElementById('win-sub').textContent =
+      `${reason} — ${clearedLabel} cleared (${pct}%). You: ${userTri} · Bot: ${botTri}. Tryangle Master.`;
+    showScreen('win-screen');
+    return;
+  }
+
+  state.pendingStage = clearedIndex + 1;
+  const nextLabel = STAGES[state.pendingStage].label;
+  document.getElementById('advance-sub').textContent =
+    `${reason} — ${clearedLabel} cleared (${pct}%). Up next: ${nextLabel}`;
+  showScreen('advance-screen');
+}
+
+function checkBoardExhausted() {
+  if (state.isGameOver || state.edges.length === 0 || getAvailableEdges().length > 0) return;
+
+  stopTimer();
+  stopBotTimer();
+  state.isGameOver = true;
+  state.isPlaying = false;
+
+  const userTri = countCompletedTriangles('user');
+  const botTri = countCompletedTriangles('bot');
+
+  if (userTri > botTri) {
+    onStageCleared('All edges claimed');
+    return;
+  }
+
+  if (botTri > userTri) {
+    document.getElementById('lose-sub').textContent =
+      `All edges claimed — You: ${userTri} · Bot: ${botTri}`;
+    showScreen('lose-screen');
+    return;
+  }
+
+  document.getElementById('timeout-sub').textContent =
+    `All edges claimed — tie at ${userTri} each`;
+  showScreen('timeout-screen');
+}
+
+function checkStageAdvance() {
+  if (state.isGameOver) return false;
+  const cfg = STAGES[state.stage];
+  const total = getTotalTriangles();
+  if (total === 0) return false;
+  const userTri = countCompletedTriangles('user');
+
+  if (userTri >= total * cfg.threshold) {
+    onStageCleared(`${userTri}/${total} faces cleared`);
+    return true;
+  }
+  return false;
+}
+
+function showScreen(id) {
+  for (const s of ['start-screen', 'advance-screen', 'win-screen', 'lose-screen', 'timeout-screen']) {
+    document.getElementById(s).classList.add('hidden');
+  }
+  const el = document.getElementById(id);
+  el.classList.remove('hidden');
+  if (id === 'win-screen') { audio.stopMusic(); audio.sfxWin(); }
+  else if (id === 'lose-screen' || id === 'timeout-screen') { audio.stopMusic(); audio.sfxLose(); }
+  else if (id === 'advance-screen') { audio.stopMusic(); audio.sfxAdvance(); }
+}
+
+function hideAllScreens() {
+  for (const s of ['start-screen', 'advance-screen', 'win-screen', 'lose-screen', 'timeout-screen']) {
+    document.getElementById(s).classList.add('hidden');
+  }
+}
+
+function resetEdgeState() {
+  for (const e of state.edges) e.owner = null;
+  for (const t of state.triangles) t._owner = null;
+  for (const entry of state.triangleMeshes) {
+    entry.mesh.material.opacity = 0;
+    entry.owner = null;
+  }
+  if (edgeLineSegmentsMesh) {
+    const colors = edgeLineSegmentsMesh.geometry.attributes.color.array;
+    const [r, g, b] = hexToRGB(COL.LINE_FREE);
+    for (let i = 0; i < state.edges.length; i++) {
+      const base = i * 6;
+      colors[base] = r; colors[base + 1] = g; colors[base + 2] = b;
+      colors[base + 3] = r; colors[base + 4] = g; colors[base + 5] = b;
+    }
+    edgeLineSegmentsMesh.geometry.attributes.color.needsUpdate = true;
+  }
+}
+
+function initStage(stageIndex) {
+  stopTimer();
+  stopBotTimer();
+  state.isGameOver = false;
+  state.userScore = 0;
+  state.botScore = 0;
+  state.hoveredEdge = null;
+  state.stage = Math.max(0, Math.min(stageIndex, STAGES.length - 1));
+
+  const cfg = STAGES[state.stage];
+  buildPolyhedronForStage(state.stage);
+  polyGroup.rotation.set(0, 0, 0);
+  resetEdgeState();
+
+  document.getElementById('stage-label').textContent = cfg.label;
+  updateScoreDisplay();
+  hideAllScreens();
+
+  state.isPlaying = true;
+  startTimer();
+  startBotTimer();
+  audio.resume().then(() => audio.startMusic());
+}
+
+function startGame() {
+  state.pendingStage = null;
+  audio.resume().then(() => audio.sfxMenu());
+  initStage(0);
+}
+
+function nextStage() {
+  if (state.pendingStage == null) return;
+  const stageToStart = state.pendingStage;
+  state.pendingStage = null;
+  audio.sfxMenu();
+  initStage(stageToStart);
+}
+
+function restartGame() {
+  state.pendingStage = null;
+  audio.sfxMenu();
+  initStage(0);
+}
+
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+function pickEdgeAt(clientX, clientY) {
+  if (edgePickMeshes.length === 0 || state.edges.length === 0) return null;
+  mouse.x = (clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  polyGroup.updateMatrixWorld(true);
+
+  const hits = raycaster.intersectObjects(edgePickMeshes, false);
+  if (hits.length === 0) return null;
+
+  const edgeId = hits[0].object.userData.edgeId;
+  if (!Number.isInteger(edgeId) || edgeId < 0 || edgeId >= state.edges.length) return null;
+  return edgeId;
+}
+
+function updateEdgeHover(clientX, clientY) {
+  if (state.isGameOver) return;
+  const edgeId = pickEdgeAt(clientX, clientY);
+  const newHover = edgeId !== null && state.edges[edgeId]?.owner == null ? edgeId : null;
+
+  if (newHover !== state.hoveredEdge) {
+    if (state.hoveredEdge !== null) setEdgeHover(state.hoveredEdge, false);
+    state.hoveredEdge = newHover;
+    if (newHover !== null) {
+      setEdgeHover(newHover, true);
+      audio.sfxHover();
+    }
+  }
+  renderer.domElement.style.cursor = newHover !== null ? 'pointer' : 'grab';
+}
+
+renderer.domElement.addEventListener('mousemove', e => updateEdgeHover(e.clientX, e.clientY));
+renderer.domElement.addEventListener('mouseleave', () => {
+  if (state.hoveredEdge !== null) setEdgeHover(state.hoveredEdge, false);
+  state.hoveredEdge = null;
+  renderer.domElement.style.cursor = 'grab';
+});
+
+function isOverlayBlocking() {
+  return ['start-screen', 'advance-screen', 'win-screen', 'lose-screen', 'timeout-screen']
+    .some(id => !document.getElementById(id).classList.contains('hidden'));
+}
+
+function handleClaim(clientX, clientY) {
+  if (!state.isPlaying || state.isGameOver || isOverlayBlocking()) return;
+  if (suppressClick) {
+    suppressClick = false;
+    return;
+  }
+
+  const edgeId = pickEdgeAt(clientX, clientY);
+  if (edgeId === null || state.edges[edgeId].owner != null) return;
+
+  if (state.hoveredEdge !== null) setEdgeHover(state.hoveredEdge, false);
+  state.hoveredEdge = null;
+
+  const newTris = claimEdge(edgeId, 'user');
+  if (state.edges[edgeId].owner !== 'user') return;
+  onEdgeClaimed('user', newTris, true);
+}
+
+renderer.domElement.addEventListener('pointerdown', e => {
+  pointerDownPos = { x: e.clientX, y: e.clientY };
+  suppressClick = false;
+});
+
+renderer.domElement.addEventListener('pointermove', e => {
+  if (!pointerDownPos) return;
+  const dx = e.clientX - pointerDownPos.x;
+  const dy = e.clientY - pointerDownPos.y;
+  if (dx * dx + dy * dy > 36) suppressClick = true;
+});
+
+renderer.domElement.addEventListener('pointerup', () => { pointerDownPos = null; });
+
+renderer.domElement.addEventListener('click', e => handleClaim(e.clientX, e.clientY));
+
+renderer.domElement.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const touch = e.touches[0];
+  handleClaim(touch.clientX, touch.clientY);
+}, { passive: false });
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  const t = performance.now() * 0.001;
+  coreLight.intensity = 0.42 + Math.sin(t * 2.2) * 0.18;
+  botLight.intensity = 0.2 + Math.sin(t * 3.1 + 1) * 0.12;
+  if (state.isPlaying && !state.isGameOver) {
+    polyGroup.rotation.y += 0.0015;
+    updateBotCountdown();
+  }
+  renderer.render(scene, camera);
+}
+animate();
+
+buildPolyhedronForStage(0);
+showScreen('start-screen');
+
+function bindScreenButton(id, handler) {
+  document.getElementById(id).addEventListener('click', e => {
+    e.stopPropagation();
+    e.preventDefault();
+    handler();
+  });
+}
+
+bindScreenButton('btn-start', startGame);
+bindScreenButton('btn-next', nextStage);
+bindScreenButton('btn-win-restart', restartGame);
+bindScreenButton('btn-lose-restart', restartGame);
+bindScreenButton('btn-timeout-restart', restartGame);
+
+document.getElementById('audio-toggle').addEventListener('click', e => {
+  e.stopPropagation();
+  audio.setEnabled(!audio.enabled);
+});
+
+window.startGame = startGame;
+window.nextStage = nextStage;
+window.restartGame = restartGame;
+</script>
+</body>
+</html>
