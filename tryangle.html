@@ -480,20 +480,22 @@ const STAGES = [
 
 const COL = {
   BG: 0x07060f,
-  LINE_FREE: 0xe878ff,
-  LINE_HOVER: 0xffffff,
-  LINE_GLOW: 0x66ffff,
-  USER: 0x39ff14,
-  BOT: 0xff2222,
-  TRI_USER: 0x39ff14,
-  TRI_BOT: 0xff2222,
-  VERT: 0xdd99ff,
+  LINE_FREE: 0x5a9fd8,
+  LINE_HOVER: 0xffee44,
+  LINE_GLOW: 0xffee44,
+  USER: 0x00bf00,
+  BOT: 0xcc1512,
+  TRI_USER: 0x00bf00,
+  TRI_BOT: 0xcc1512,
+  VERT: 0x8ab4e8,
   SHELL: 0x120e22,
   STAR: 0xe0d4ff,
   GRID: 0x00e8ff,
 };
 
-const EDGE_PICK_SIZE = 0.28;
+const EDGE_DIM = { free: 0.6, hover: 1.0, claimed: 1.0, user: 1.35 };
+
+const EDGE_PICK_RADIUS = 0.38;
 
 // ═══════════════════════════════════════════════════════
 // 8-BIT AUDIO (Web Audio API — no external files)
@@ -745,6 +747,9 @@ const vertGroup = new THREE.Group();
 polyGroup.add(vertGroup);
 
 let edgeLineSegmentsMesh = null;
+const edgePickUp = new THREE.Vector3(0, 1, 0);
+const edgePickDir = new THREE.Vector3();
+const edgePickQuat = new THREE.Quaternion();
 let shellMesh = null;
 let vertDotGeo = null;
 let vertDotMat = null;
@@ -893,9 +898,8 @@ function createEdgeMeshes(edges) {
     const base = e.id * 6;
     positions[base] = e.from[0]; positions[base + 1] = e.from[1]; positions[base + 2] = e.from[2];
     positions[base + 3] = e.to[0]; positions[base + 4] = e.to[1]; positions[base + 5] = e.to[2];
-    const [r, g, b] = hexToRGB(COL.LINE_FREE, 1.75);
-    colors[base] = r; colors[base + 1] = g; colors[base + 2] = b;
-    colors[base + 3] = r; colors[base + 4] = g; colors[base + 5] = b;
+    colors[base] = colors[base + 1] = colors[base + 2] = 0;
+    colors[base + 3] = colors[base + 4] = colors[base + 5] = 0;
   }
 
   const geo = new THREE.BufferGeometry();
@@ -906,6 +910,8 @@ function createEdgeMeshes(edges) {
   edgeLineSegmentsMesh = new THREE.LineSegments(geo, mat);
   edgeLineSegmentsMesh.renderOrder = 2;
   edgeLineGroup.add(edgeLineSegmentsMesh);
+
+  for (const e of edges) setEdgeVertexColors(e.id, COL.LINE_FREE, EDGE_DIM.free);
 
   edgePickMat = new THREE.MeshBasicMaterial({
     transparent: true,
@@ -921,11 +927,12 @@ function createEdgeMeshes(edges) {
     const dy = e.to[1] - e.from[1];
     const dz = e.to[2] - e.from[2];
     const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    const radius = len / 2 + EDGE_PICK_SIZE;
-
-    const pickGeo = new THREE.SphereGeometry(radius, 8, 6);
+    const pickGeo = new THREE.CylinderGeometry(EDGE_PICK_RADIUS, EDGE_PICK_RADIUS, len, 8, 1);
     const mesh = new THREE.Mesh(pickGeo, edgePickMat);
     mesh.position.set(mx, my, mz);
+    edgePickDir.set(dx, dy, dz).normalize();
+    edgePickQuat.setFromUnitVectors(edgePickUp, edgePickDir);
+    mesh.quaternion.copy(edgePickQuat);
     mesh.userData.edgeId = e.id;
     mesh.renderOrder = 3;
     edgeLineGroup.add(mesh);
@@ -1012,24 +1019,28 @@ function buildPolyhedronForStage(stageIndex) {
   controls.update();
 }
 
-function hexToRGB(hex, boost = 1) {
+function hexToRGB(hex, dim = 1) {
   return [
-    (hex >> 16 & 255) / 255 * boost,
-    (hex >> 8 & 255) / 255 * boost,
-    (hex & 255) / 255 * boost,
+    Math.min((hex >> 16 & 255) / 255 * dim, 1),
+    Math.min((hex >> 8 & 255) / 255 * dim, 1),
+    Math.min((hex & 255) / 255 * dim, 1),
   ];
 }
 
-function updateEdgeColor(edgeId, owner) {
+function setEdgeVertexColors(edgeId, hex, dim = 1) {
   if (!edgeLineSegmentsMesh) return;
-  const colors = edgeLineSegmentsMesh.geometry.attributes.color.array;
-  const [r, g, b] = owner === 'user' ? hexToRGB(COL.USER, 2.5)
-                : owner === 'bot'  ? hexToRGB(COL.BOT, 2.5)
-                :                     hexToRGB(COL.LINE_FREE, 1.75);
+  const [r, g, b] = hexToRGB(hex, dim);
   const base = edgeId * 6;
+  const colors = edgeLineSegmentsMesh.geometry.attributes.color.array;
   colors[base] = r; colors[base + 1] = g; colors[base + 2] = b;
   colors[base + 3] = r; colors[base + 4] = g; colors[base + 5] = b;
   edgeLineSegmentsMesh.geometry.attributes.color.needsUpdate = true;
+}
+
+function updateEdgeColor(edgeId, owner) {
+  if (owner === 'user') setEdgeVertexColors(edgeId, COL.USER, EDGE_DIM.user);
+  else if (owner === 'bot') setEdgeVertexColors(edgeId, COL.BOT, EDGE_DIM.claimed);
+  else setEdgeVertexColors(edgeId, COL.LINE_FREE, EDGE_DIM.free);
 }
 
 function ensureHoverGlow() {
@@ -1039,8 +1050,7 @@ function ensureHoverGlow() {
   const mat = new THREE.LineBasicMaterial({
     color: COL.LINE_GLOW,
     transparent: true,
-    opacity: 1,
-    blending: THREE.AdditiveBlending,
+    opacity: 0.45,
     depthTest: false,
     depthWrite: false,
   });
@@ -1055,12 +1065,7 @@ function setEdgeHover(edgeId, on) {
   if (!edgeLineSegmentsMesh || !state.edges[edgeId]) return;
   if (state.edges[edgeId].owner != null) return;
 
-  const colors = edgeLineSegmentsMesh.geometry.attributes.color.array;
-  const [r, g, b] = on ? hexToRGB(COL.LINE_HOVER, 2.0) : hexToRGB(COL.LINE_FREE, 1.75);
-  const base = edgeId * 6;
-  colors[base] = r; colors[base + 1] = g; colors[base + 2] = b;
-  colors[base + 3] = r; colors[base + 4] = g; colors[base + 5] = b;
-  edgeLineSegmentsMesh.geometry.attributes.color.needsUpdate = true;
+  setEdgeVertexColors(edgeId, on ? COL.LINE_HOVER : COL.LINE_FREE, on ? EDGE_DIM.hover : EDGE_DIM.free);
 
   if (on) {
     ensureHoverGlow();
@@ -1079,7 +1084,7 @@ function updateTriangleFill(triId, owner) {
   const entry = state.triangleMeshes.find(t => t.triId === triId);
   if (!entry) return;
   entry.mesh.material.color.set(owner === 'user' ? COL.TRI_USER : COL.TRI_BOT);
-  entry.mesh.material.opacity = 0.62;
+  entry.mesh.material.opacity = owner === 'user' ? 0.74 : 0.62;
   entry.owner = owner;
 }
 
@@ -1430,14 +1435,9 @@ function resetEdgeState() {
     entry.owner = null;
   }
   if (edgeLineSegmentsMesh) {
-    const colors = edgeLineSegmentsMesh.geometry.attributes.color.array;
-    const [r, g, b] = hexToRGB(COL.LINE_FREE, 1.75);
     for (let i = 0; i < state.edges.length; i++) {
-      const base = i * 6;
-      colors[base] = r; colors[base + 1] = g; colors[base + 2] = b;
-      colors[base + 3] = r; colors[base + 4] = g; colors[base + 5] = b;
+      setEdgeVertexColors(i, COL.LINE_FREE, EDGE_DIM.free);
     }
-    edgeLineSegmentsMesh.geometry.attributes.color.needsUpdate = true;
   }
 }
 
